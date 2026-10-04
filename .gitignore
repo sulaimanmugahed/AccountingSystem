@@ -29,3 +29,11 @@ Thumbs.db
 
 ## Logs
 *.log
+
+## Node / Vite (client)
+client/node_modules/
+client/dist/
+client/.vite/
+client/*.local
+npm-debug.log*
+yarn-error.log*

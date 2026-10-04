@@ -67,6 +67,72 @@ cd src/AccountingSystem.Api
 dotnet ef migrations add <Name> --project ../AccountingSystem.Infrastructure --startup-project .
 ```
 
+## React client (`client/`)
+
+A complete single-page app for every API surface — dashboard, general ledger, AR, AP,
+banking, inventory, fixed assets, budgeting, tax codes, company settings and all seven
+reports. It ships with an in-browser mock of the API, so the whole UI can be run and
+explored without the .NET SDK.
+
+**Stack:** Vite + React 19 + TypeScript · TanStack Query (server state) · TanStack Table
+(every table, sorting/filtering/pagination) · React Hook Form + Zod (every form) ·
+shadcn/ui-style components on Tailwind CSS · React Router.
+
+### Run it against the real API
+
+```bash
+cd client
+npm install
+npm run dev            # proxies /api to http://localhost:5074
+```
+
+Start the .NET API first (`cd src/AccountingSystem.Api && dotnet run`). Override the
+proxy target or API base URL with `VITE_API_PROXY_TARGET` / `VITE_API_BASE_URL`
+(see `client/.env.example`).
+
+### Run it with no backend (bundled mock API)
+
+```bash
+cd client
+npm run dev:mock       # http://localhost:5173
+```
+
+`npm run dev:mock` installs a mock of the API in the browser: same routes, same DTO
+shapes, same enums, seeded with a demo company, chart of accounts, customers, vendors,
+items, invoices, bills, bank transactions, fixed assets and budgets. Sign in with
+**admin@demo.local / Admin@12345**. Other seeded role logins (see `client/src/mocks/db.ts`):
+`accountant@demo.local` / `Accountant@123`, `arclerk@demo.local` / `ArClerk@1234`,
+`apclerk@demo.local` / `ApClerk@1234`, `viewer@demo.local` / `Viewer@1234`.
+
+### Scripts
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Dev server against the .NET API |
+| `npm run dev:mock` | Dev server against the bundled mock API |
+| `npm run build` / `build:mock` | Type-check + production build |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run smoke` | Both smoke suites below |
+| `npm run smoke:mock` | Headless checks of the mock API (every route, ledger integrity) |
+| `npm run smoke:render` | Renders every route in jsdom, drives the sign-in and create-account forms |
+
+Both smoke suites are dev-only, need no network and are what keeps the mock honest:
+`smoke:mock` asserts the mock's DTO field names and posting behaviour match the .NET
+controllers/services, and `smoke:render` fails on any React warning or blank page.
+
+### Source map
+
+```
+client/src/
+  app/          router, navigation, route guards
+  components/   ui primitives (shadcn-style), data-table, layout, shared bits
+  features/     one folder per module: auth, dashboard, gl, ar, ap, banking,
+                inventory, assets, budgeting, tax, settings, reports
+  hooks/        TanStack Query hooks (all reads) + mutation hooks
+  lib/          typed API client, endpoint wrappers, enums/DTO types, formatters
+  mocks/        in-browser mock API (db + route handlers) used by dev:mock
+```
+
 ## Typical flow
 
 1. `POST /api/auth/login` → JWT.

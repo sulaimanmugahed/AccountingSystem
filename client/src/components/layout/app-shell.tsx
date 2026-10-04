@@ -1,0 +1,232 @@
+import * as React from 'react'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import {
+  ChevronsLeft,
+  ChevronsRight,
+  Command,
+  LogOut,
+  Menu,
+  Moon,
+  Sun,
+  UserCircle2,
+  X,
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { useAuth } from '@/lib/auth'
+import { useTheme } from '@/lib/theme'
+import { companyApi } from '@/lib/api/endpoints'
+import { queryKeys } from '@/lib/api/keys'
+import { initials } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { navGroups } from '@/app/nav'
+
+function useCompany() {
+  return useQuery({
+    queryKey: queryKeys.company,
+    queryFn: companyApi.current,
+    staleTime: 10 * 60_000,
+    retry: false,
+  })
+}
+
+function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; collapsed?: boolean }) {
+  const { hasRole } = useAuth()
+  const { data: company } = useCompany()
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className={cn('flex h-16 items-center gap-3 border-b border-sidebar-border px-4', collapsed && 'justify-center px-2')}>
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-white">
+          <Command className="h-5 w-5" />
+        </div>
+        {!collapsed ? (
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-white">Ledgerly</p>
+            <p className="truncate text-xs text-sidebar-foreground/60">{company?.name ?? 'Accounting System'}</p>
+          </div>
+        ) : null}
+      </div>
+
+      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4 scrollbar-thin">
+        {navGroups.map((group) => {
+          const items = group.items.filter((item) => hasRole(...(item.roles ?? [])))
+          if (!items.length) return null
+          return (
+            <div key={group.title} className="space-y-1">
+              {!collapsed ? (
+                <p className="px-2 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+                  {group.title}
+                </p>
+              ) : null}
+              {items.map((item) => (
+                <NavLink
+                  key={item.href}
+                  to={item.href}
+                  end={item.href === '/'}
+                  onClick={onNavigate}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-white',
+                      isActive && 'bg-sidebar-accent text-white',
+                      collapsed && 'justify-center px-2',
+                    )
+                  }
+                  title={collapsed ? item.title : undefined}
+                >
+                  {item.icon ? <item.icon className="h-4 w-4 shrink-0" /> : null}
+                  {!collapsed ? <span className="truncate">{item.title}</span> : null}
+                </NavLink>
+              ))}
+            </div>
+          )
+        })}
+      </nav>
+
+      <div className={cn('border-t border-sidebar-border p-3', collapsed && 'px-2')}>
+        <div className={cn('rounded-lg bg-white/5 p-3 text-xs text-sidebar-foreground/70', collapsed && 'hidden')}>
+          <p className="font-medium text-sidebar-foreground">Double-entry enforcement</p>
+          <p className="mt-1 leading-relaxed">
+            Every document posts through a single journal service — entries must balance and fall in an open fiscal
+            period.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function AppShell() {
+  const { session, logout } = useAuth()
+  const { resolvedTheme, toggleTheme } = useTheme()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [mobileOpen, setMobileOpen] = React.useState(false)
+  const [collapsed, setCollapsed] = React.useState(() => localStorage.getItem('ledgerly.sidebar') === 'collapsed')
+  const { data: company } = useCompany()
+
+  React.useEffect(() => {
+    setMobileOpen(false)
+  }, [location.pathname])
+
+  React.useEffect(() => {
+    localStorage.setItem('ledgerly.sidebar', collapsed ? 'collapsed' : 'expanded')
+  }, [collapsed])
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login', { replace: true })
+  }
+
+  return (
+    <div className="flex min-h-screen bg-background">
+      {/* Desktop sidebar */}
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-30 hidden shrink-0 border-r border-sidebar-border bg-sidebar transition-[width] duration-200 lg:block',
+          collapsed ? 'w-[68px]' : 'w-64',
+        )}
+      >
+        <SidebarContent collapsed={collapsed} />
+      </aside>
+
+      {/* Mobile drawer */}
+      {mobileOpen ? (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
+          <aside className="absolute inset-y-0 left-0 w-72 bg-sidebar shadow-xl">
+            <button
+              type="button"
+              onClick={() => setMobileOpen(false)}
+              className="absolute right-3 top-4 rounded-md p-1 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <SidebarContent onNavigate={() => setMobileOpen(false)} />
+          </aside>
+        </div>
+      ) : null}
+
+      <div className={cn('flex min-w-0 flex-1 flex-col transition-[padding] duration-200', collapsed ? 'lg:pl-[68px]' : 'lg:pl-64')}>
+        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-6">
+          <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileOpen(true)}>
+            <Menu className="h-5 w-5" />
+            <span className="sr-only">Open navigation</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hidden lg:inline-flex"
+            onClick={() => setCollapsed((value) => !value)}
+          >
+            {collapsed ? <ChevronsRight className="h-5 w-5" /> : <ChevronsLeft className="h-5 w-5" />}
+            <span className="sr-only">Toggle sidebar</span>
+          </Button>
+
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{company?.name ?? 'Accounting System'}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              Base currency {company?.baseCurrencyCode ?? 'USD'}
+              {company?.fiscalYearStartMonth
+                ? ` · fiscal year starts month ${company.fiscalYearStartMonth}`
+                : ''}
+            </p>
+          </div>
+
+          <Button variant="ghost" size="icon" onClick={toggleTheme} title="Toggle theme">
+            {resolvedTheme === 'dark' ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
+            <span className="sr-only">Toggle theme</span>
+          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="gap-2 px-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+                  {initials(session?.fullName ?? session?.email)}
+                </span>
+                <span className="hidden text-left sm:block">
+                  <span className="block max-w-[160px] truncate text-sm font-medium">{session?.fullName}</span>
+                  <span className="block text-xs text-muted-foreground">{session?.roles.join(', ')}</span>
+                </span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium">{session?.fullName}</p>
+                  <p className="text-xs text-muted-foreground">{session?.email}</p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link to="/settings/company">
+                  <UserCircle2 /> Company profile
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
+                <LogOut /> Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </header>
+
+        <main className="flex-1 space-y-6 p-4 sm:p-6">
+          <Outlet />
+        </main>
+
+        <footer className="border-t px-6 py-4 text-xs text-muted-foreground">
+          Ledgerly · React client for the AccountingSystem .NET API · TanStack Query + TanStack Table + React Hook Form
+        </footer>
+      </div>
+    </div>
+  )
+}
