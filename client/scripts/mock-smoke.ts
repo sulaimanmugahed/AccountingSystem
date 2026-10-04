@@ -378,10 +378,9 @@ section('Auth')
 /* ------------------------------------------------------------------- summary */
 
 section('Result')
-assert(failures.length === 0, `${passed} checks passed`)
-
 if (failures.length) {
-  console.error(`\n${failures.length} failing check(s):`)
+  console.error(`❌ ${failures.length} of ${passed + failures.length} checks failed:`)
   for (const failure of failures) console.error(`  - ${failure}`)
   process.exit(1)
 }
+console.log(`✅ ${passed}/${passed} checks passed`)
