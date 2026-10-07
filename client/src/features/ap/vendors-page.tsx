@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -35,19 +36,23 @@ import { CURRENCIES } from '@/lib/constants'
 import { formatMoney } from '@/lib/format'
 import type { Vendor, VendorRequest } from '@/lib/types'
 
-const vendorSchema = z.object({
-  code: z.string().min(1, 'Vendor code is required').max(30),
-  name: z.string().min(2, 'Vendor name is required').max(160),
-  email: z.union([z.string().email('Enter a valid email address'), z.literal('')]).optional(),
-  phone: z.string().max(40).optional().or(z.literal('')),
-  paymentTermsDays: z.coerce.number().int().min(0).max(365),
-  currencyCode: z.string().length(3, 'Use a 3-letter currency code'),
-  is1099Vendor: z.boolean(),
-})
+type Translate = (key: string, options?: Record<string, unknown>) => string
 
-type VendorFormValues = z.infer<typeof vendorSchema>
+const vendorSchema = (t: Translate) =>
+  z.object({
+    code: z.string().min(1, t('vendors.codeRequired')).max(30),
+    name: z.string().min(2, t('vendors.nameRequired')).max(160),
+    email: z.union([z.string().email(t('validate.invalidEmail')), z.literal('')]).optional(),
+    phone: z.string().max(40).optional().or(z.literal('')),
+    paymentTermsDays: z.coerce.number().int().min(0, t('vendors.termsNegative')).max(365),
+    currencyCode: z.string().length(3, t('vendors.currencyCode3')),
+    is1099Vendor: z.boolean(),
+  })
+
+type VendorFormValues = z.infer<ReturnType<typeof vendorSchema>>
 
 export function VendorsPage() {
+  const { t } = useTranslation()
   const { hasRole } = useAuth()
   const canManage = hasRole('Admin', 'Accountant', 'APClerk')
 
@@ -73,22 +78,24 @@ export function VendorsPage() {
     () => [
       {
         accessorKey: 'code',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Code" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.code')} />,
         cell: ({ row }) => <span className="font-mono text-xs font-medium">{row.original.code}</span>,
       },
       {
         accessorKey: 'name',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Vendor" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('vendors.vendor')} />,
         cell: ({ row }) => (
           <div className="min-w-[180px]">
             <p className="font-medium">{row.original.name}</p>
-            {row.original.is1099Vendor ? <p className="text-xs text-muted-foreground">1099 vendor</p> : null}
+            {row.original.is1099Vendor ? (
+              <p className="text-xs text-muted-foreground">{t('vendors.is1099')}</p>
+            ) : null}
           </div>
         ),
       },
       {
         id: 'contact',
-        header: 'Contact',
+        header: t('vendors.contact'),
         enableSorting: false,
         cell: ({ row }) => (
           <div className="space-y-0.5 text-xs text-muted-foreground">
@@ -103,12 +110,12 @@ export function VendorsPage() {
       },
       {
         accessorKey: 'paymentTermsDays',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Terms" />,
-        cell: ({ row }) => <span className="text-sm">Net {row.original.paymentTermsDays}</span>,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('vendors.terms')} />,
+        cell: ({ row }) => <span className="text-sm">{t('common.netTerms', { days: row.original.paymentTermsDays })}</span>,
       },
       {
         id: 'openBalance',
-        header: 'Open AP',
+        header: t('vendors.openAp'),
         enableSorting: false,
         cell: ({ row }) => {
           const balance = openBalanceByVendor.get(row.original.id) ?? 0
@@ -121,9 +128,13 @@ export function VendorsPage() {
       },
       {
         accessorKey: 'isActive',
-        header: 'Status',
+        header: t('common.status'),
         cell: ({ row }) =>
-          row.original.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="outline">Inactive</Badge>,
+          row.original.isActive ? (
+            <Badge variant="success">{t('common.active')}</Badge>
+          ) : (
+            <Badge variant="outline">{t('common.inactive')}</Badge>
+          ),
       },
       {
         id: 'actions',
@@ -171,13 +182,17 @@ export function VendorsPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Vendors"
-        description={`Supplier master data.${totalOpen > 0 ? ` Total open AP is ${formatMoney(totalOpen)}.` : ''}`}
-        breadcrumbs={[{ label: 'Payables' }, { label: 'Vendors' }]}
+        title={t('vendors.title')}
+        description={
+          totalOpen > 0
+            ? `${t('vendors.description')} ${t('vendors.openAp')} ${formatMoney(totalOpen)}.`
+            : t('vendors.description')
+        }
+        breadcrumbs={[{ label: t('nav.groups.payables') }, { label: t('vendors.breadcrumb') }]}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => vendorsQuery.refetch()} loading={vendorsQuery.isFetching}>
-              <RefreshCw className="h-4 w-4" /> Refresh
+              <RefreshCw className="h-4 w-4" /> {t('common.refresh')}
             </Button>
             <Button
               size="sm"
@@ -187,20 +202,20 @@ export function VendorsPage() {
                 setDialogOpen(true)
               }}
             >
-              <Plus className="h-4 w-4" /> New vendor
+              <Plus className="h-4 w-4" /> {t('vendors.newVendor')}
             </Button>
           </>
         }
       />
 
       {vendorsQuery.error ? (
-        <ErrorState error={vendorsQuery.error} onRetry={() => vendorsQuery.refetch()} title="Could not load vendors" />
+        <ErrorState error={vendorsQuery.error} onRetry={() => vendorsQuery.refetch()} title={t('vendors.couldNotLoad')} />
       ) : (
         <DataTable
           columns={columns}
           data={vendorsQuery.data ?? []}
           isLoading={vendorsQuery.isLoading}
-          searchPlaceholder="Search vendors by code, name or email…"
+          searchPlaceholder={t('vendors.searchPlaceholder')}
           getRowId={(row) => row.id}
           initialSorting={[{ id: 'name', desc: false }]}
           toolbar={
@@ -209,7 +224,7 @@ export function VendorsPage() {
               size="sm"
               onClick={() => setIncludeInactive((value) => !value)}
             >
-              {includeInactive ? 'Showing inactive' : 'Active only'}
+              {includeInactive ? t('common.showInactive') : t('common.activeOnly')}
             </Button>
           }
         />
@@ -220,9 +235,11 @@ export function VendorsPage() {
       <ConfirmDialog
         open={!!vendorToDeactivate}
         onOpenChange={(open) => !open && setVendorToDeactivate(null)}
-        title="Deactivate vendor?"
-        description={vendorToDeactivate ? `${vendorToDeactivate.name} will no longer be selectable on new documents.` : undefined}
-        confirmLabel="Deactivate"
+        title={t('vendors.deactivateTitle')}
+        description={
+          vendorToDeactivate ? t('vendors.deactivateDescription', { name: vendorToDeactivate.name }) : undefined
+        }
+        confirmLabel={t('vendors.deactivate')}
         destructive
         loading={deactivateVendor.isPending}
         onConfirm={() => {
@@ -247,8 +264,9 @@ function VendorDialog({
   const updateVendor = useUpdateVendor()
   const isEdit = !!vendor
 
+  const { t } = useTranslation()
   const form = useForm<VendorFormValues>({
-    resolver: zodResolver(vendorSchema),
+    resolver: zodResolver(vendorSchema(t)),
     values: {
       code: vendor?.code ?? '',
       name: vendor?.name ?? '',
@@ -289,8 +307,10 @@ function VendorDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>{isEdit ? `Edit ${vendor?.name}` : 'New vendor'}</DialogTitle>
-          <DialogDescription>Payment terms default the due date on new bills.</DialogDescription>
+          <DialogTitle>
+            {isEdit ? t('vendors.editVendorTitle', { name: vendor?.name ?? '' }) : t('vendors.newVendorTitle')}
+          </DialogTitle>
+          <DialogDescription>{t('vendors.dialogDescriptionBills')}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -298,46 +318,60 @@ function VendorDialog({
             <FormField
               control={form.control}
               name="code"
-              render={({ field }) => <TextField label="Vendor code" placeholder="V-2006" required {...field} />}
+              render={({ field }) => <TextField label={t('vendors.vendorCode')} placeholder="V-2006" required {...field} />}
             />
             <FormField
               control={form.control}
               name="currencyCode"
               render={({ field }) => (
-                <SelectField label="Currency" required value={field.value} onChange={field.onChange} options={CURRENCIES} />
+                <SelectField
+                  label={t('common.currency')}
+                  required
+                  value={field.value}
+                  onChange={field.onChange}
+                  options={CURRENCIES}
+                />
               )}
             />
             <FormField
               control={form.control}
               name="name"
               render={({ field }) => (
-                <TextField label="Legal name" placeholder="Pacific Office Supplies" required className="sm:col-span-2" {...field} />
+                <TextField
+                  label={t('vendors.legalName')}
+                  placeholder={t('vendors.legalNamePlaceholder')}
+                  required
+                  className="sm:col-span-2"
+                  {...field}
+                />
               )}
             />
             <FormField
               control={form.control}
               name="email"
               render={({ field }) => (
-                <TextField label="Email" type="email" placeholder="billing@example.com" {...field} value={field.value ?? ''} />
+                <TextField label={t('common.email')} type="email" placeholder="billing@example.com" {...field} value={field.value ?? ''} />
               )}
             />
             <FormField
               control={form.control}
               name="phone"
-              render={({ field }) => <TextField label="Phone" {...field} value={field.value ?? ''} />}
+              render={({ field }) => <TextField label={t('common.phone')} {...field} value={field.value ?? ''} />}
             />
             <FormField
               control={form.control}
               name="paymentTermsDays"
-              render={({ field }) => <TextField label="Payment terms (days)" type="number" min={0} {...field} />}
+              render={({ field }) => (
+                <TextField label={t('vendors.paymentTermsDays')} type="number" min={0} {...field} />
+              )}
             />
             <FormField
               control={form.control}
               name="is1099Vendor"
               render={({ field }) => (
                 <CheckboxField
-                  label="1099 vendor"
-                  description="Include in 1099 reporting"
+                  label={t('vendors.is1099')}
+                  description={t('vendors.include1099')}
                   checked={field.value}
                   onChange={field.onChange}
                 />
@@ -348,10 +382,10 @@ function VendorDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="submit" form="vendor-form" loading={createVendor.isPending || updateVendor.isPending}>
-            {isEdit ? 'Save changes' : 'Create vendor'}
+            {isEdit ? t('vendors.saveChanges') : t('vendors.createVendor')}
           </Button>
         </DialogFooter>
       </DialogContent>

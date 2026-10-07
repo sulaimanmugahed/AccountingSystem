@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -35,19 +36,23 @@ import { CURRENCIES } from '@/lib/constants'
 import { formatMoney } from '@/lib/format'
 import type { Customer, CustomerRequest } from '@/lib/types'
 
-const customerSchema = z.object({
-  code: z.string().min(1, 'Customer code is required').max(30),
-  name: z.string().min(2, 'Customer name is required').max(160),
-  email: z.union([z.string().email('Enter a valid email address'), z.literal('')]).optional(),
-  phone: z.string().max(40).optional().or(z.literal('')),
-  paymentTermsDays: z.coerce.number().int().min(0, 'Terms cannot be negative').max(365),
-  creditLimit: z.coerce.number().min(0, 'Credit limit cannot be negative'),
-  currencyCode: z.string().length(3, 'Use a 3-letter currency code'),
-})
+type Translate = (key: string, options?: Record<string, unknown>) => string
 
-type CustomerFormValues = z.infer<typeof customerSchema>
+const customerSchema = (t: Translate) =>
+  z.object({
+    code: z.string().min(1, t('customers.codeRequired')).max(30),
+    name: z.string().min(2, t('customers.nameRequired')).max(160),
+    email: z.union([z.string().email(t('validate.invalidEmail')), z.literal('')]).optional(),
+    phone: z.string().max(40).optional().or(z.literal('')),
+    paymentTermsDays: z.coerce.number().int().min(0, t('customers.termsNegative')).max(365),
+    creditLimit: z.coerce.number().min(0, t('customers.creditNegative')),
+    currencyCode: z.string().length(3, t('customers.currencyCode3')),
+  })
+
+type CustomerFormValues = z.infer<ReturnType<typeof customerSchema>>
 
 export function CustomersPage() {
+  const { t } = useTranslation()
   const { hasRole } = useAuth()
   const canManage = hasRole('Admin', 'Accountant', 'ARClerk')
 
@@ -73,12 +78,12 @@ export function CustomersPage() {
     () => [
       {
         accessorKey: 'code',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Code" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.code')} />,
         cell: ({ row }) => <span className="font-mono text-xs font-medium">{row.original.code}</span>,
       },
       {
         accessorKey: 'name',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Customer" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('customers.customer')} />,
         cell: ({ row }) => (
           <div className="min-w-[180px]">
             <p className="font-medium">{row.original.name}</p>
@@ -88,7 +93,7 @@ export function CustomersPage() {
       },
       {
         id: 'contact',
-        header: 'Contact',
+        header: t('customers.contact'),
         enableSorting: false,
         cell: ({ row }) => (
           <div className="space-y-0.5 text-xs text-muted-foreground">
@@ -107,36 +112,40 @@ export function CustomersPage() {
       },
       {
         accessorKey: 'paymentTermsDays',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Terms" />,
-        cell: ({ row }) => <span className="text-sm">Net {row.original.paymentTermsDays}</span>,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('customers.terms')} />,
+        cell: ({ row }) => <span className="text-sm">{t('common.netTerms', { days: row.original.paymentTermsDays })}</span>,
       },
       {
         accessorKey: 'creditLimit',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Credit limit" align="right" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('customers.creditLimit')} align="right" />,
         cell: ({ row }) => (
-          <div className="text-right">
+          <div className="text-end">
             <Money value={row.original.creditLimit} />
           </div>
         ),
       },
       {
         id: 'openBalance',
-        header: 'Open AR',
+        header: t('customers.openAr'),
         enableSorting: false,
         cell: ({ row }) => {
           const balance = openBalanceByCustomer.get(row.original.id) ?? 0
           return (
-            <div className="text-right">
-              {balance > 0 ? <Money value={balance} /> : <span className="text-muted-foreground">—</span>}
+            <div className="text-end">
+              {balance > 0 ? <Money value={balance} /> : <span className="text-muted-foreground">{t('common.dash')}</span>}
             </div>
           )
         },
       },
       {
         accessorKey: 'isActive',
-        header: 'Status',
+        header: t('common.status'),
         cell: ({ row }) =>
-          row.original.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="outline">Inactive</Badge>,
+          row.original.isActive ? (
+            <Badge variant="success">{t('common.active')}</Badge>
+          ) : (
+            <Badge variant="outline">{t('common.inactive')}</Badge>
+          ),
       },
       {
         id: 'actions',
@@ -184,13 +193,17 @@ export function CustomersPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Customers"
-        description={`Master data for accounts receivable.${totalOpen > 0 ? ` Total open AR is ${formatMoney(totalOpen)}.` : ''}`}
-        breadcrumbs={[{ label: 'Receivables' }, { label: 'Customers' }]}
+        title={t('customers.title')}
+        description={
+          totalOpen > 0
+            ? t('customers.descriptionWithBalance', { amount: formatMoney(totalOpen) })
+            : t('customers.description')
+        }
+        breadcrumbs={[{ label: t('nav.groups.receivables') }, { label: t('customers.breadcrumb') }]}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => customersQuery.refetch()} loading={customersQuery.isFetching}>
-              <RefreshCw className="h-4 w-4" /> Refresh
+              <RefreshCw className="h-4 w-4" /> {t('common.refresh')}
             </Button>
             <Button
               size="sm"
@@ -200,20 +213,20 @@ export function CustomersPage() {
                 setDialogOpen(true)
               }}
             >
-              <Plus className="h-4 w-4" /> New customer
+              <Plus className="h-4 w-4" /> {t('customers.newCustomer')}
             </Button>
           </>
         }
       />
 
       {customersQuery.error ? (
-        <ErrorState error={customersQuery.error} onRetry={() => customersQuery.refetch()} title="Could not load customers" />
+        <ErrorState error={customersQuery.error} onRetry={() => customersQuery.refetch()} title={t('customers.couldNotLoad')} />
       ) : (
         <DataTable
           columns={columns}
           data={customersQuery.data ?? []}
           isLoading={customersQuery.isLoading}
-          searchPlaceholder="Search customers by code, name or email…"
+          searchPlaceholder={t('customers.searchPlaceholder')}
           getRowId={(row) => row.id}
           initialSorting={[{ id: 'name', desc: false }]}
           toolbar={
@@ -222,7 +235,7 @@ export function CustomersPage() {
               size="sm"
               onClick={() => setIncludeInactive((value) => !value)}
             >
-              {includeInactive ? 'Showing inactive' : 'Active only'}
+              {includeInactive ? t('common.showInactive') : t('common.activeOnly')}
             </Button>
           }
         />
@@ -233,9 +246,13 @@ export function CustomersPage() {
       <ConfirmDialog
         open={!!customerToDeactivate}
         onOpenChange={(open) => !open && setCustomerToDeactivate(null)}
-        title="Deactivate customer?"
-        description={customerToDeactivate ? `${customerToDeactivate.name} will no longer be selectable on new documents.` : undefined}
-        confirmLabel="Deactivate"
+        title={t('customers.deactivateTitle')}
+        description={
+          customerToDeactivate
+            ? t('customers.deactivateDescription', { name: customerToDeactivate.name })
+            : undefined
+        }
+        confirmLabel={t('customers.deactivate')}
         destructive
         loading={deactivateCustomer.isPending}
         onConfirm={() => {
@@ -256,12 +273,13 @@ function CustomerDialog({
   onOpenChange: (open: boolean) => void
   customer: Customer | null
 }) {
+  const { t } = useTranslation()
   const createCustomer = useCreateCustomer()
   const updateCustomer = useUpdateCustomer()
   const isEdit = !!customer
 
   const form = useForm<CustomerFormValues>({
-    resolver: zodResolver(customerSchema),
+    resolver: zodResolver(customerSchema(t)),
     values: {
       code: customer?.code ?? '',
       name: customer?.name ?? '',
@@ -302,10 +320,10 @@ function CustomerDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>{isEdit ? `Edit ${customer?.name}` : 'New customer'}</DialogTitle>
-          <DialogDescription>
-            Payment terms drive invoice due dates; the credit limit is enforced on the customer dashboard.
-          </DialogDescription>
+          <DialogTitle>
+            {isEdit ? t('customers.editCustomerTitle', { name: customer?.name ?? '' }) : t('customers.newCustomerTitle')}
+          </DialogTitle>
+          <DialogDescription>{t('customers.dialogDescription')}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -313,14 +331,14 @@ function CustomerDialog({
             <FormField
               control={form.control}
               name="code"
-              render={({ field }) => <TextField label="Customer code" placeholder="C-1007" required {...field} />}
+              render={({ field }) => <TextField label={t('customers.customerCode')} placeholder="C-1007" required {...field} />}
             />
             <FormField
               control={form.control}
               name="currencyCode"
               render={({ field }) => (
                 <SelectField
-                  label="Currency"
+                  label={t('common.currency')}
                   required
                   value={field.value}
                   onChange={field.onChange}
@@ -332,33 +350,41 @@ function CustomerDialog({
               control={form.control}
               name="name"
               render={({ field }) => (
-                <TextField label="Legal name" placeholder="Northwind Traders" required className="sm:col-span-2" {...field} />
+                <TextField
+                  label={t('customers.legalName')}
+                  placeholder={t('customers.legalNamePlaceholder')}
+                  required
+                  className="sm:col-span-2"
+                  {...field}
+                />
               )}
             />
             <FormField
               control={form.control}
               name="email"
               render={({ field }) => (
-                <TextField label="Email" type="email" placeholder="billing@example.com" {...field} value={field.value ?? ''} />
+                <TextField label={t('common.email')} type="email" placeholder="billing@example.com" {...field} value={field.value ?? ''} />
               )}
             />
             <FormField
               control={form.control}
               name="phone"
               render={({ field }) => (
-                <TextField label="Phone" placeholder="+1 (555) 010-0100" {...field} value={field.value ?? ''} />
+                <TextField label={t('common.phone')} placeholder="+1 (555) 010-0100" {...field} value={field.value ?? ''} />
               )}
             />
             <FormField
               control={form.control}
               name="paymentTermsDays"
-              render={({ field }) => <TextField label="Payment terms (days)" type="number" min={0} {...field} />}
+              render={({ field }) => (
+                <TextField label={t('customers.paymentTermsDays')} type="number" min={0} {...field} />
+              )}
             />
             <FormField
               control={form.control}
               name="creditLimit"
               render={({ field }) => (
-                <TextField label="Credit limit" type="number" step="any" min={0} className="text-right" {...field} />
+                <TextField label={t('customers.creditLimit')} type="number" step="any" min={0} className="text-end" {...field} />
               )}
             />
           </form>
@@ -366,14 +392,14 @@ function CustomerDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             type="submit"
             form="customer-form"
             loading={createCustomer.isPending || updateCustomer.isPending}
           >
-            {isEdit ? 'Save changes' : 'Create customer'}
+            {isEdit ? t('customers.saveChanges') : t('customers.createCustomer')}
           </Button>
         </DialogFooter>
       </DialogContent>

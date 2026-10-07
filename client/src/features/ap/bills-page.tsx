@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useFieldArray, useForm } from 'react-hook-form'
+import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -32,32 +32,37 @@ import { useAccounts, useBills, useItems, useTaxCodes, useVendors } from '@/hook
 import { useCreateBill, usePostBill, useVoidBill } from '@/hooks/mutations'
 import { useAuth } from '@/lib/auth'
 import { CURRENCIES } from '@/lib/constants'
-import { billStatusLabels } from '@/lib/enums'
+import { useLabels } from '@/lib/labels'
+import { useTranslation } from 'react-i18next'
 import { addDays, formatDate, formatMoney, isOverdue, today } from '@/lib/format'
 import { cn, toNumber } from '@/lib/utils'
 import { billStatusTone, type Bill } from '@/lib/types'
 
-const lineSchema = z.object({
-  itemId: z.string().nullable().optional(),
-  description: z.string().min(1, 'Describe the line').max(300),
-  quantity: z.coerce.number().positive('Quantity must be greater than zero'),
-  unitCost: z.coerce.number().min(0, 'Cost cannot be negative'),
-  taxCodeId: z.string().nullable().optional(),
-  expenseAccountId: z.string().nullable().optional(),
-})
+type Translate = (key: string, options?: Record<string, unknown>) => string
 
-const billSchema = z.object({
-  vendorId: z.string().min(1, 'Select a vendor'),
-  vendorInvoiceNumber: z.string().max(60).optional().or(z.literal('')),
-  billDate: z.string().min(1, 'Bill date is required'),
-  dueDate: z.string().min(1, 'Due date is required'),
-  currencyCode: z.string().length(3),
-  exchangeRateToBase: z.coerce.number().positive(),
-  memo: z.string().max(300).optional().or(z.literal('')),
-  lines: z.array(lineSchema).min(1, 'Add at least one line'),
-})
+const billSchema = (t: Translate) => {
+  const lineSchema = z.object({
+    itemId: z.string().nullable().optional(),
+    description: z.string().min(1, t('bills.errDescribeLine')).max(300),
+    quantity: z.coerce.number().positive(t('bills.errQuantityPositive')),
+    unitCost: z.coerce.number().min(0, t('bills.errCostNegative')),
+    taxCodeId: z.string().nullable().optional(),
+    expenseAccountId: z.string().nullable().optional(),
+  })
 
-type BillFormValues = z.infer<typeof billSchema>
+  return z.object({
+    vendorId: z.string().min(1, t('bills.errSelectVendor')),
+    vendorInvoiceNumber: z.string().max(60).optional().or(z.literal('')),
+    billDate: z.string().min(1, t('bills.errBillDateRequired')),
+    dueDate: z.string().min(1, t('bills.errDueDateRequired')),
+    currencyCode: z.string().length(3),
+    exchangeRateToBase: z.coerce.number().positive(),
+    memo: z.string().max(300).optional().or(z.literal('')),
+    lines: z.array(lineSchema).min(1, t('invoices.errAddLine')),
+  })
+}
+
+type BillFormValues = z.infer<ReturnType<typeof billSchema>>
 
 const emptyLine: BillFormValues['lines'][number] = {
   itemId: null,
@@ -69,6 +74,8 @@ const emptyLine: BillFormValues['lines'][number] = {
 }
 
 export function BillsPage() {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const { hasRole } = useAuth()
   const canManage = hasRole('Admin', 'Accountant', 'APClerk')
 
@@ -102,22 +109,22 @@ export function BillsPage() {
     () => [
       {
         accessorKey: 'billNumber',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Bill #" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('bills.billNumber')} />,
         cell: ({ row }) => <span className="font-mono text-xs font-medium">{row.original.billNumber}</span>,
       },
       {
         accessorKey: 'vendorName',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Vendor" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('bills.vendor')} />,
         cell: ({ row }) => <span className="font-medium">{row.original.vendorName}</span>,
       },
       {
         accessorKey: 'billDate',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Date" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.date')} />,
         cell: ({ row }) => <span className="whitespace-nowrap">{formatDate(row.original.billDate)}</span>,
       },
       {
         accessorKey: 'dueDate',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Due" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.dueDate')} />,
         cell: ({ row }) => {
           const overdue = isOverdue(row.original.dueDate, row.original.status)
           return (
@@ -129,7 +136,7 @@ export function BillsPage() {
       },
       {
         accessorKey: 'total',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Total" align="right" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.total')} align="right" />,
         cell: ({ row }) => (
           <div className="text-right">
             <Money value={row.original.total} />
@@ -138,7 +145,7 @@ export function BillsPage() {
       },
       {
         accessorKey: 'balance',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Balance" align="right" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('invoices.balance')} align="right" />,
         cell: ({ row }) => (
           <div className="text-right font-medium">
             {row.original.balance > 0 ? <Money value={row.original.balance} /> : <span className="text-muted-foreground">—</span>}
@@ -147,10 +154,10 @@ export function BillsPage() {
       },
       {
         accessorKey: 'status',
-        header: 'Status',
+        header: t('common.status'),
         cell: ({ row }) => (
           <Badge variant={billStatusTone[row.original.status] ?? 'secondary'}>
-            {billStatusLabels[row.original.status] ?? '—'}
+            {labels.billStatus[row.original.status] ?? t('common.dash')}
           </Badge>
         ),
       },
@@ -170,7 +177,7 @@ export function BillsPage() {
               disabled={!canManage || row.original.status !== 1}
               onClick={() => setBillToPost(row.original)}
             >
-              <Send className="h-4 w-4" /> Post
+              <Send className="h-4 w-4" /> {t('bills.post')}
             </Button>
             <Button
               variant="ghost"
@@ -178,7 +185,7 @@ export function BillsPage() {
               disabled={!canManage || row.original.status === 5 || row.original.amountPaid > 0}
               onClick={() => setBillToVoid(row.original)}
             >
-              <Ban className="h-4 w-4" /> Void
+              <Ban className="h-4 w-4" /> {t('bills.void')}
             </Button>
           </div>
         ),
@@ -190,29 +197,29 @@ export function BillsPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Vendor bills"
-        description="Enter supplier invoices as drafts, then post them to book AP against the expense or inventory account on each line."
-        breadcrumbs={[{ label: 'Payables' }, { label: 'Bills' }]}
+        title={t('bills.title')}
+        description={t('bills.description')}
+        breadcrumbs={[{ label: t('nav.groups.payables') }, { label: t('bills.breadcrumb') }]}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => billsQuery.refetch()} loading={billsQuery.isFetching}>
-              <RefreshCw className="h-4 w-4" /> Refresh
+              <RefreshCw className="h-4 w-4" /> {t('common.refresh')}
             </Button>
             <Button size="sm" disabled={!canManage} onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4" /> New bill
+              <Plus className="h-4 w-4" /> {t('bills.newBill')}
             </Button>
           </>
         }
       />
 
       {billsQuery.error ? (
-        <ErrorState error={billsQuery.error} onRetry={() => billsQuery.refetch()} title="Could not load bills" />
+        <ErrorState error={billsQuery.error} onRetry={() => billsQuery.refetch()} title={t('bills.couldNotLoad')} />
       ) : (
         <DataTable
           columns={columns}
           data={bills}
           isLoading={billsQuery.isLoading}
-          searchPlaceholder="Search by bill number or vendor…"
+          searchPlaceholder={t('bills.searchPlaceholder')}
           getRowId={(row) => row.id}
           onRowClick={(row) => setSelected(row)}
           initialSorting={[{ id: 'billDate', desc: true }]}
@@ -220,10 +227,10 @@ export function BillsPage() {
             <div className="flex flex-wrap items-center gap-2">
               <Select value={vendorFilter} onValueChange={setVendorFilter}>
                 <SelectTrigger className="h-8 w-[200px]">
-                  <SelectValue placeholder="All vendors" />
+                  <SelectValue placeholder={t('bills.allVendors')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All vendors</SelectItem>
+                  <SelectItem value="all">{t('bills.allVendors')}</SelectItem>
                   {(vendorsQuery.data ?? []).map((vendor) => (
                     <SelectItem key={vendor.id} value={vendor.id}>
                       {vendor.name}
@@ -233,20 +240,20 @@ export function BillsPage() {
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="h-8 w-[160px]">
-                  <SelectValue placeholder="All statuses" />
+                  <SelectValue placeholder={t('bills.allStatuses')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  <SelectItem value="open">Open</SelectItem>
-                  <SelectItem value="overdue">Overdue only</SelectItem>
-                  <SelectItem value="1">Draft</SelectItem>
-                  <SelectItem value="2">Approved</SelectItem>
-                  <SelectItem value="3">Partially paid</SelectItem>
-                  <SelectItem value="4">Paid</SelectItem>
-                  <SelectItem value="5">Voided</SelectItem>
+                  <SelectItem value="all">{t('bills.allStatuses')}</SelectItem>
+                  <SelectItem value="open">{t('bills.openOnly')}</SelectItem>
+                  <SelectItem value="overdue">{t('invoices.overdueOnly')}</SelectItem>
+                  <SelectItem value="1">{labels.billStatus[1]}</SelectItem>
+                  <SelectItem value="2">{labels.billStatus[2]}</SelectItem>
+                  <SelectItem value="3">{labels.billStatus[3]}</SelectItem>
+                  <SelectItem value="4">{labels.billStatus[4]}</SelectItem>
+                  <SelectItem value="5">{labels.billStatus[5]}</SelectItem>
                 </SelectContent>
               </Select>
-              <Badge variant="outline">Outstanding {formatMoney(outstanding)}</Badge>
+              <Badge variant="outline">{t('bills.outstanding', { amount: formatMoney(outstanding) })}</Badge>
             </div>
           }
         />
@@ -258,13 +265,16 @@ export function BillsPage() {
       <ConfirmDialog
         open={!!billToPost}
         onOpenChange={(open) => !open && setBillToPost(null)}
-        title="Post this bill?"
+        title={t('bills.postTitle')}
         description={
           billToPost
-            ? `${billToPost.billNumber} for ${formatMoney(billToPost.total)} will book AP and the line expenses. Stocked items are received into inventory at cost.`
+            ? t('bills.postDescription', {
+                bill: billToPost.billNumber,
+                amount: formatMoney(billToPost.total),
+              })
             : undefined
         }
-        confirmLabel="Post bill"
+        confirmLabel={t('bills.postConfirm')}
         loading={postBill.isPending}
         onConfirm={() => {
           if (!billToPost) return
@@ -275,13 +285,11 @@ export function BillsPage() {
       <ConfirmDialog
         open={!!billToVoid}
         onOpenChange={(open) => !open && setBillToVoid(null)}
-        title="Void this bill?"
+        title={t('bills.voidTitle')}
         description={
-          billToVoid
-            ? `${billToVoid.billNumber} will be voided. Posted bills are reversed with a mirror journal entry rather than deleted.`
-            : undefined
+          billToVoid ? t('bills.voidDescription', { bill: billToVoid.billNumber }) : undefined
         }
-        confirmLabel="Void bill"
+        confirmLabel={t('bills.voidConfirm')}
         destructive
         loading={voidBill.isPending}
         onConfirm={() => {
@@ -294,17 +302,23 @@ export function BillsPage() {
 }
 
 function BillDetailDialog({ bill, onOpenChange }: { bill: Bill | null; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation()
+  const labels = useLabels()
   return (
     <Dialog open={!!bill} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="font-mono">{bill?.billNumber}</span>
-            {bill ? <Badge variant={billStatusTone[bill.status] ?? 'secondary'}>{billStatusLabels[bill.status]}</Badge> : null}
+            {bill ? (
+              <Badge variant={billStatusTone[bill.status] ?? 'secondary'}>
+                {labels.billStatus[bill.status]}
+              </Badge>
+            ) : null}
           </DialogTitle>
           <DialogDescription>
-            {bill?.vendorName} · received {bill ? formatDate(bill.billDate) : ''} · due{' '}
-            {bill ? formatDate(bill.dueDate) : ''}
+            {bill?.vendorName} · {t('bills.received', { date: bill ? formatDate(bill.billDate) : '' })} ·{' '}
+            {t('bills.due', { date: bill ? formatDate(bill.dueDate) : '' })}
           </DialogDescription>
         </DialogHeader>
 
@@ -312,25 +326,25 @@ function BillDetailDialog({ bill, onOpenChange }: { bill: Bill | null; onOpenCha
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">Unit cost</TableHead>
-                <TableHead className="text-right">Tax</TableHead>
-                <TableHead className="text-right">Line total</TableHead>
+                <TableHead>{t('common.description')}</TableHead>
+                <TableHead className="text-end">{t('invoices.qty')}</TableHead>
+                <TableHead className="text-end">{t('bills.unitCost')}</TableHead>
+                <TableHead className="text-end">{t('invoices.tax')}</TableHead>
+                <TableHead className="text-end">{t('invoices.lineTotal')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {bill?.lines.map((line) => (
                 <TableRow key={line.id}>
                   <TableCell>{line.description}</TableCell>
-                  <TableCell className="text-right tabular-nums">{line.quantity}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-end tabular-nums">{line.quantity}</TableCell>
+                  <TableCell className="text-end">
                     <Money value={line.unitCost} />
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-end">
                     <Money value={line.taxAmount} />
                   </TableCell>
-                  <TableCell className="text-right font-medium">
+                  <TableCell className="text-end font-medium">
                     <Money value={line.lineTotal} />
                   </TableCell>
                 </TableRow>
@@ -340,11 +354,15 @@ function BillDetailDialog({ bill, onOpenChange }: { bill: Bill | null; onOpenCha
         </div>
 
         <div className="rounded-lg bg-muted/40 p-4">
-          <SummaryRow label="Subtotal" value={bill ? formatMoney(bill.subTotal) : '—'} />
-          <SummaryRow label="Tax" value={bill ? formatMoney(bill.taxTotal) : '—'} />
-          <SummaryRow label="Total" value={bill ? formatMoney(bill.total) : '—'} strong />
-          <SummaryRow label="Paid" value={bill ? formatMoney(bill.amountPaid) : '—'} />
-          <SummaryRow label="Balance due" value={bill ? formatMoney(bill.balance) : '—'} strong />
+          <SummaryRow label={t('invoices.subtotal')} value={bill ? formatMoney(bill.subTotal) : t('common.dash')} />
+          <SummaryRow label={t('invoices.tax')} value={bill ? formatMoney(bill.taxTotal) : t('common.dash')} />
+          <SummaryRow label={t('common.total')} value={bill ? formatMoney(bill.total) : t('common.dash')} strong />
+          <SummaryRow label={t('invoices.paid')} value={bill ? formatMoney(bill.amountPaid) : t('common.dash')} />
+          <SummaryRow
+            label={t('invoices.balanceDue')}
+            value={bill ? formatMoney(bill.balance) : t('common.dash')}
+            strong
+          />
         </div>
       </DialogContent>
     </Dialog>
@@ -352,6 +370,7 @@ function BillDetailDialog({ bill, onOpenChange }: { bill: Bill | null; onOpenCha
 }
 
 function CreateBillDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation()
   const vendorsQuery = useVendors()
   const itemsQuery = useItems()
   const accountsQuery = useAccounts()
@@ -359,7 +378,7 @@ function CreateBillDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
   const createBill = useCreateBill()
 
   const form = useForm<BillFormValues>({
-    resolver: zodResolver(billSchema),
+    resolver: zodResolver(billSchema(t)),
     defaultValues: {
       vendorId: '',
       vendorInvoiceNumber: '',
@@ -373,7 +392,7 @@ function CreateBillDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
   })
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'lines' })
-  const watched = form.watch()
+  const watched = useWatch({ control: form.control })
 
   const vendorOptions = useMemo(
     () => (vendorsQuery.data ?? []).map((vendor) => ({ value: vendor.id, label: `${vendor.code} · ${vendor.name}` })),
@@ -451,8 +470,8 @@ function CreateBillDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl">
         <DialogHeader>
-          <DialogTitle>New vendor bill</DialogTitle>
-          <DialogDescription>Saved as a draft — post it from the bill list to update AP and inventory.</DialogDescription>
+          <DialogTitle>{t('bills.newTitle')}</DialogTitle>
+          <DialogDescription>{t('bills.savedAsDraft')}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -463,7 +482,7 @@ function CreateBillDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                 name="vendorId"
                 render={({ field }) => (
                   <ComboboxField
-                    label="Vendor"
+                    label={t('bills.vendor')}
                     required
                     options={vendorOptions}
                     value={field.value}
@@ -475,7 +494,7 @@ function CreateBillDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                         form.setValue('currencyCode', vendor.currencyCode)
                       }
                     }}
-                    placeholder="Select a vendor"
+                    placeholder={t('bills.selectVendor')}
                     allowClear={false}
                   />
                 )}
@@ -484,7 +503,12 @@ function CreateBillDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                 control={form.control}
                 name="vendorInvoiceNumber"
                 render={({ field }) => (
-                  <TextField label="Vendor invoice #" placeholder="VINV-9012" {...field} value={field.value ?? ''} />
+                  <TextField
+                    label={t('bills.vendorInvoiceNumber')}
+                    placeholder="VINV-9012"
+                    {...field}
+                    value={field.value ?? ''}
+                  />
                 )}
               />
               <FormField
@@ -492,7 +516,7 @@ function CreateBillDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                 name="billDate"
                 render={({ field }) => (
                   <DateField
-                    label="Bill date"
+                    label={t('bills.billDate')}
                     required
                     {...field}
                     onChange={(event) => {
@@ -505,36 +529,52 @@ function CreateBillDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
               <FormField
                 control={form.control}
                 name="dueDate"
-                render={({ field }) => <DateField label="Due date" required {...field} />}
+                render={({ field }) => <DateField label={t('common.dueDate')} required {...field} />}
               />
               <FormField
                 control={form.control}
                 name="currencyCode"
                 render={({ field }) => (
-                  <SelectField label="Currency" value={field.value} onChange={field.onChange} options={CURRENCIES} />
+                  <SelectField
+                    label={t('common.currency')}
+                    value={field.value}
+                    onChange={field.onChange}
+                    options={CURRENCIES}
+                  />
                 )}
               />
               <FormField
                 control={form.control}
                 name="exchangeRateToBase"
                 render={({ field }) => (
-                  <TextField label="Exchange rate" type="number" step="any" className="text-right" {...field} />
+                  <TextField
+                    label={t('common.exchangeRate')}
+                    type="number"
+                    step="any"
+                    className="text-end"
+                    {...field}
+                  />
                 )}
               />
               <FormField
                 control={form.control}
                 name="memo"
                 render={({ field }) => (
-                  <TextAreaField label="Memo" className="sm:col-span-3" {...field} value={field.value ?? ''} />
+                  <TextAreaField
+                    label={t('common.memo')}
+                    className="sm:col-span-3"
+                    {...field}
+                    value={field.value ?? ''}
+                  />
                 )}
               />
             </div>
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Lines</p>
+                <p className="text-sm font-medium">{t('bills.lines')}</p>
                 <Button type="button" variant="outline" size="sm" onClick={() => append({ ...emptyLine })}>
-                  <Plus className="h-4 w-4" /> Add line
+                  <Plus className="h-4 w-4" /> {t('bills.addLine')}
                 </Button>
               </div>
 
@@ -547,7 +587,7 @@ function CreateBillDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                         name={`lines.${index}.itemId`}
                         render={({ field: itemField }) => (
                           <ComboboxField
-                            label={index === 0 ? 'Item' : undefined}
+                            label={index === 0 ? t('bills.item') : undefined}
                             options={itemOptions}
                             value={itemField.value ?? null}
                             onChange={(value) => {
@@ -560,7 +600,7 @@ function CreateBillDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                                 if (item.defaultTaxCodeId) form.setValue(`lines.${index}.taxCodeId`, item.defaultTaxCodeId)
                               }
                             }}
-                            placeholder="Optional"
+                            placeholder={t('common.optional')}
                           />
                         )}
                       />
@@ -570,7 +610,10 @@ function CreateBillDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                         control={form.control}
                         name={`lines.${index}.description`}
                         render={({ field: descriptionField }) => (
-                          <TextField label={index === 0 ? 'Description' : undefined} {...descriptionField} />
+                          <TextField
+                            label={index === 0 ? t('common.description') : undefined}
+                            {...descriptionField}
+                          />
                         )}
                       />
                     </div>
@@ -580,11 +623,11 @@ function CreateBillDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                         name={`lines.${index}.quantity`}
                         render={({ field: quantityField }) => (
                           <TextField
-                            label={index === 0 ? 'Qty' : undefined}
+                            label={index === 0 ? t('bills.qty') : undefined}
                             type="number"
                             step="any"
                             min={0}
-                            className="text-right"
+                            className="text-end"
                             {...quantityField}
                           />
                         )}
@@ -596,11 +639,11 @@ function CreateBillDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                         name={`lines.${index}.unitCost`}
                         render={({ field: costField }) => (
                           <TextField
-                            label={index === 0 ? 'Cost' : undefined}
+                            label={index === 0 ? t('bills.cost') : undefined}
                             type="number"
                             step="any"
                             min={0}
-                            className="text-right"
+                            className="text-end"
                             {...costField}
                           />
                         )}
@@ -612,11 +655,11 @@ function CreateBillDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                         name={`lines.${index}.taxCodeId`}
                         render={({ field: taxField }) => (
                           <ComboboxField
-                            label={index === 0 ? 'Tax code' : undefined}
+                            label={index === 0 ? t('bills.taxCode') : undefined}
                             options={purchaseTaxOptions}
                             value={taxField.value ?? null}
                             onChange={(value) => taxField.onChange(value)}
-                            placeholder="No tax"
+                            placeholder={t('bills.noTax')}
                           />
                         )}
                       />
@@ -627,11 +670,11 @@ function CreateBillDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                         name={`lines.${index}.expenseAccountId`}
                         render={({ field: accountField }) => (
                           <ComboboxField
-                            label={index === 0 ? 'Expense / asset' : undefined}
+                            label={index === 0 ? t('bills.expenseOrAsset') : undefined}
                             options={expenseAccountOptions}
                             value={accountField.value ?? null}
                             onChange={(value) => accountField.onChange(value)}
-                            placeholder="Company default"
+                            placeholder={t('bills.companyDefault')}
                           />
                         )}
                       />
@@ -653,23 +696,23 @@ function CreateBillDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
             </div>
 
             <div className="flex flex-col items-end gap-1 rounded-lg bg-muted/40 p-4">
-              <SummaryRow label="Subtotal" value={formatMoney(computed.subTotal)} className="w-full max-w-sm" />
-              <SummaryRow label="Purchase tax" value={formatMoney(computed.taxTotal)} className="w-full max-w-sm" />
-              <SummaryRow label="Bill total" value={formatMoney(computed.total)} strong className="w-full max-w-sm" />
+              <SummaryRow label={t('invoices.subtotal')} value={formatMoney(computed.subTotal)} className="w-full max-w-sm" />
+              <SummaryRow label={t('bills.purchaseTax')} value={formatMoney(computed.taxTotal)} className="w-full max-w-sm" />
+              <SummaryRow label={t('bills.billTotal')} value={formatMoney(computed.total)} strong className="w-full max-w-sm" />
             </div>
 
             {vendorOptions.length === 0 && !vendorsQuery.isLoading ? (
-              <EmptyState title="No vendors yet" description="Add a vendor before entering a bill." />
+              <EmptyState title={t('bills.noVendors')} description={t('bills.noVendorsHint')} />
             ) : null}
           </form>
         </Form>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="submit" form="create-bill" loading={createBill.isPending}>
-            Save draft
+            {t('bills.saveDraft')}
           </Button>
         </DialogFooter>
       </DialogContent>

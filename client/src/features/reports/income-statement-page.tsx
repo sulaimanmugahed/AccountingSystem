@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Card, CardContent } from '@/components/ui/card'
 import { Money, StatCard } from '@/components/common/misc'
 import { useIncomeStatement } from '@/hooks/queries'
@@ -18,6 +19,7 @@ function Section({
   total: number
   tone: 'positive' | 'negative'
 }) {
+  const { t } = useTranslation()
   return (
     <ReportTableShell>
       <div className="flex items-center justify-between border-b bg-muted/50 px-4 py-2.5">
@@ -28,7 +30,9 @@ function Section({
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td className="px-4 py-6 text-center text-muted-foreground">No activity in this period.</td>
+              <td className="px-4 py-6 text-center text-muted-foreground">
+                {t('reports.incomeStatement.noActivity')}
+              </td>
             </tr>
           ) : (
             rows.map((row) => (
@@ -36,7 +40,7 @@ function Section({
                 <td className="px-4 py-2 text-muted-foreground">
                   <span className="font-mono text-xs">{row.accountCode}</span> {row.accountName}
                 </td>
-                <td className="px-4 py-2 text-right">
+                <td className="px-4 py-2 text-end">
                   <Money value={row.amount} className={tone === 'negative' ? 'text-destructive' : undefined} />
                 </td>
               </tr>
@@ -49,6 +53,7 @@ function Section({
 }
 
 export function IncomeStatementPage() {
+  const { t } = useTranslation()
   const [startDate, setStartDate] = useState(startOfYear())
   const [endDate, setEndDate] = useState(endOfMonth())
   const report = useIncomeStatement(startDate, endDate)
@@ -57,8 +62,11 @@ export function IncomeStatementPage() {
 
   return (
     <ReportPage
-      title="Income statement"
-      description={`Revenue and expenses posted between ${formatDate(startDate)} and ${formatDate(endDate)}.`}
+      title={t('reports.incomeStatement.title')}
+      description={t('reports.incomeStatement.description', {
+        from: formatDate(startDate),
+        to: formatDate(endDate),
+      })}
       onRefresh={() => report.refetch()}
       isLoading={report.isLoading}
       error={report.error}
@@ -75,17 +83,33 @@ export function IncomeStatementPage() {
       }
       controls={
         <>
-          <DateRangeControls from={startDate} to={endDate} onFromChange={setStartDate} onToChange={setEndDate} toLabel="To" />
+          <DateRangeControls
+            from={startDate}
+            to={endDate}
+            onFromChange={setStartDate}
+            onToChange={setEndDate}
+            toLabel={t('common.to')}
+          />
           <div className="grid gap-3 sm:grid-cols-3">
-            <StatCard label="Total revenue" value={formatMoney(report.data?.totalRevenue ?? 0)} tone="positive" />
-            <StatCard label="Total expenses" value={formatMoney(report.data?.totalExpense ?? 0)} tone="negative" />
             <StatCard
-              label="Net income"
+              label={t('reports.incomeStatement.totalRevenue')}
+              value={formatMoney(report.data?.totalRevenue ?? 0)}
+              tone="positive"
+            />
+            <StatCard
+              label={t('reports.incomeStatement.totalExpenses')}
+              value={formatMoney(report.data?.totalExpense ?? 0)}
+              tone="negative"
+            />
+            <StatCard
+              label={t('reports.incomeStatement.netIncome')}
               value={formatMoney(netIncome)}
               tone={netIncome >= 0 ? 'positive' : 'negative'}
               hint={
                 report.data?.totalRevenue
-                  ? `${((netIncome / report.data.totalRevenue) * 100).toFixed(1)}% net margin`
+                  ? t('reports.incomeStatement.netMargin', {
+                      value: ((netIncome / report.data.totalRevenue) * 100).toFixed(1),
+                    })
                   : undefined
               }
             />
@@ -95,13 +119,13 @@ export function IncomeStatementPage() {
     >
       <div className="grid gap-4 lg:grid-cols-2">
         <Section
-          title="Revenue"
+          title={t('reports.incomeStatement.revenue')}
           rows={report.data?.revenues ?? []}
           total={report.data?.totalRevenue ?? 0}
           tone="positive"
         />
         <Section
-          title="Expenses"
+          title={t('reports.incomeStatement.expenses')}
           rows={report.data?.expenses ?? []}
           total={report.data?.totalExpense ?? 0}
           tone="negative"
@@ -111,13 +135,18 @@ export function IncomeStatementPage() {
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
           <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Net income</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              {t('reports.incomeStatement.netIncome')}
+            </p>
             <p className={`text-2xl font-semibold tabular-nums ${netIncome >= 0 ? 'text-success' : 'text-destructive'}`}>
               {formatMoney(netIncome)}
             </p>
           </div>
           <p className="text-sm text-muted-foreground">
-            {formatMoney(report.data?.totalRevenue ?? 0)} revenue − {formatMoney(report.data?.totalExpense ?? 0)} expenses
+            {t('reports.incomeStatement.formula', {
+              revenue: formatMoney(report.data?.totalRevenue ?? 0),
+              expenses: formatMoney(report.data?.totalExpense ?? 0),
+            })}
           </p>
         </CardContent>
       </Card>

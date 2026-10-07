@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -26,16 +27,20 @@ import { useAuth } from '@/lib/auth'
 import { ROLES } from '@/lib/constants'
 import { formatDate } from '@/lib/format'
 
-const userSchema = z.object({
-  email: z.string().email('Enter a valid email address'),
-  password: z.string().min(8, 'Passwords must be at least 8 characters'),
-  fullName: z.string().min(2, 'Full name is required').max(120),
-  role: z.string().min(1, 'Select a role'),
-})
+type Translate = (key: string, options?: Record<string, unknown>) => string
 
-type UserFormValues = z.infer<typeof userSchema>
+const userSchema = (t: Translate) =>
+  z.object({
+    email: z.string().email(t('company.errEmail')),
+    password: z.string().min(8, t('company.errPassword')),
+    fullName: z.string().min(2, t('company.errFullName')).max(120),
+    role: z.string().min(1, t('company.errRole')),
+  })
+
+type UserFormValues = z.infer<ReturnType<typeof userSchema>>
 
 export function CompanyPage() {
+  const { t } = useTranslation()
   const companyQuery = useCompany()
   const yearsQuery = useFiscalYears()
   const { session, isAdmin } = useAuth()
@@ -44,63 +49,85 @@ export function CompanyPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Company profile"
-        description="Base currency, fiscal year configuration and access details for this tenant."
-        breadcrumbs={[{ label: 'Configuration' }, { label: 'Company' }]}
+        title={t('company.title')}
+        description={t('company.description')}
+        breadcrumbs={[{ label: t('nav.groups.configuration') }, { label: t('company.breadcrumb') }]}
         actions={
           isAdmin ? (
             <Button size="sm" onClick={() => setInviteOpen(true)}>
-              <UserPlus className="h-4 w-4" /> Invite user
+              <UserPlus className="h-4 w-4" /> {t('company.inviteUser')}
             </Button>
           ) : null
         }
       />
 
       {companyQuery.error ? (
-        <ErrorState error={companyQuery.error} onRetry={() => companyQuery.refetch()} title="Could not load the company profile" />
+        <ErrorState
+          error={companyQuery.error}
+          onRetry={() => companyQuery.refetch()}
+          title={t('company.couldNotLoad')}
+        />
       ) : (
         <div className="grid gap-4 lg:grid-cols-3">
-          <SectionCard title="Company" description="Legal entity details" className="lg:col-span-2">
+          <SectionCard
+            title={t('company.companyCard')}
+            description={t('company.companyCardHint')}
+            className="lg:col-span-2"
+          >
             <div className="grid gap-4 sm:grid-cols-2">
-              <Detail label="Name" value={companyQuery.data?.name} />
-              <Detail label="Legal name" value={companyQuery.data?.legalName} />
-              <Detail label="Tax registration" value={companyQuery.data?.taxRegistrationNumber} />
-              <Detail label="Base currency" value={companyQuery.data?.baseCurrencyCode} />
+              <Detail label={t('common.name')} value={companyQuery.data?.name} />
+              <Detail label={t('company.legalName')} value={companyQuery.data?.legalName} />
               <Detail
-                label="Fiscal year start"
-                value={companyQuery.data ? `Month ${companyQuery.data.fiscalYearStartMonth}` : undefined}
+                label={t('company.taxRegistration')}
+                value={companyQuery.data?.taxRegistrationNumber}
               />
-              <Detail label="Status" value={companyQuery.data?.isActive ? 'Active' : 'Inactive'} />
+              <Detail label={t('company.baseCurrency')} value={companyQuery.data?.baseCurrencyCode} />
+              <Detail
+                label={t('company.fiscalYearStart')}
+                value={
+                  companyQuery.data
+                    ? t('company.monthNumber', { month: companyQuery.data.fiscalYearStartMonth })
+                    : undefined
+                }
+              />
+              <Detail
+                label={t('common.status')}
+                value={companyQuery.data?.isActive ? t('common.active') : t('common.inactive')}
+              />
             </div>
           </SectionCard>
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Contact</CardTitle>
+              <CardTitle className="text-sm">{t('company.contact')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <p className="flex items-start gap-2 text-muted-foreground">
                 <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
-                  {companyQuery.data?.addressLine1 ?? '—'}
+                  {companyQuery.data?.addressLine1 ?? t('common.dash')}
                   <br />
                   {[companyQuery.data?.city, companyQuery.data?.state, companyQuery.data?.postalCode]
                     .filter(Boolean)
-                    .join(', ') || '—'}
+                    .join(', ') || t('common.dash')}
                   <br />
                   {companyQuery.data?.country ?? ''}
                 </span>
               </p>
               <p className="flex items-center gap-2 text-muted-foreground">
-                <Phone className="h-4 w-4" /> {companyQuery.data?.phone ?? '—'}
+                <Phone className="h-4 w-4" /> {companyQuery.data?.phone ?? t('common.dash')}
               </p>
               <p className="flex items-center gap-2 text-muted-foreground">
-                <Mail className="h-4 w-4" /> {companyQuery.data?.email ?? '—'}
+                <Mail className="h-4 w-4" /> {companyQuery.data?.email ?? t('common.dash')}
               </p>
             </CardContent>
           </Card>
 
-          <SectionCard title="Fiscal years" description="Periods drive posting validation" className="lg:col-span-2">
+          <SectionCard
+            title={t('company.fiscalYears')}
+            description={t('company.fiscalYearsHint')}
+            className="lg:col-span-2"
+          >
             <div className="space-y-2">
               {(yearsQuery.data ?? []).map((year) => (
                 <div key={year.id} className="flex items-center justify-between rounded-lg border px-4 py-2.5">
@@ -111,12 +138,12 @@ export function CompanyPage() {
                     </p>
                   </div>
                   <Badge variant={year.isClosed ? 'secondary' : 'success'}>
-                    {year.isClosed ? 'Closed' : 'Open'}
+                    {year.isClosed ? t('company.closed') : t('company.open')}
                   </Badge>
                 </div>
               ))}
               {(yearsQuery.data ?? []).length === 0 ? (
-                <p className="text-sm text-muted-foreground">No fiscal years configured.</p>
+                <p className="text-sm text-muted-foreground">{t('company.noFiscalYears')}</p>
               ) : null}
             </div>
           </SectionCard>
@@ -124,14 +151,14 @@ export function CompanyPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
-                <Building2 className="h-4 w-4" /> Your session
+                <Building2 className="h-4 w-4" /> {t('company.yourSession')}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              <Detail label="Signed in as" value={session?.fullName} />
-              <Detail label="Email" value={session?.email} />
+              <Detail label={t('company.signedInAs')} value={session?.fullName} />
+              <Detail label={t('common.email')} value={session?.email} />
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Roles</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('company.roles')}</p>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {(session?.roles ?? []).map((role) => (
                     <Badge key={role} variant="secondary">
@@ -160,14 +187,15 @@ function Detail({ label, value }: { label: string; value?: string | null }) {
 }
 
 function InviteUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation()
   const registerUser = useApiMutation({
     mutationFn: authApi.register,
-    successMessage: 'User created and assigned to the company.',
+    successMessage: t('company.userCreated'),
     invalidate: [],
   })
 
   const form = useForm<UserFormValues>({
-    resolver: zodResolver(userSchema),
+    resolver: zodResolver(userSchema(t)),
     defaultValues: { email: '', password: '', fullName: '', role: 'Accountant' },
   })
 
@@ -193,10 +221,8 @@ function InviteUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Invite a user</DialogTitle>
-          <DialogDescription>
-            Creates an Identity account bound to this company and assigns one of the built-in roles.
-          </DialogDescription>
+          <DialogTitle>{t('company.inviteTitle')}</DialogTitle>
+          <DialogDescription>{t('company.inviteDescription')}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -204,14 +230,21 @@ function InviteUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
             <FormField
               control={form.control}
               name="fullName"
-              render={({ field }) => <TextField label="Full name" placeholder="Dana Accountant" required {...field} />}
+              render={({ field }) => (
+                <TextField
+                  label={t('company.fullName')}
+                  placeholder={t('company.fullNamePlaceholder')}
+                  required
+                  {...field}
+                />
+              )}
             />
             <FormField
               control={form.control}
               name="role"
               render={({ field }) => (
                 <SelectField
-                  label="Role"
+                  label={t('company.role')}
                   required
                   value={field.value}
                   onChange={field.onChange}
@@ -223,14 +256,26 @@ function InviteUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
               control={form.control}
               name="email"
               render={({ field }) => (
-                <TextField label="Email" type="email" placeholder="user@company.com" required {...field} />
+                <TextField
+                  label={t('common.email')}
+                  type="email"
+                  placeholder={t('company.emailPlaceholder')}
+                  required
+                  {...field}
+                />
               )}
             />
             <FormField
               control={form.control}
               name="password"
               render={({ field }) => (
-                <TextField label="Temporary password" type="text" placeholder="At least 8 characters" required {...field} />
+                <TextField
+                  label={t('company.temporaryPassword')}
+                  type="text"
+                  placeholder={t('company.temporaryPasswordPlaceholder')}
+                  required
+                  {...field}
+                />
               )}
             />
           </form>
@@ -238,10 +283,10 @@ function InviteUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="submit" form="invite-user" loading={registerUser.isPending}>
-            Create user
+            {t('company.createUser')}
           </Button>
         </DialogFooter>
       </DialogContent>

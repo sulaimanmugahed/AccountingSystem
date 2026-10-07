@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -22,22 +23,28 @@ import { ErrorState } from '@/components/common/misc'
 import { useAccounts, useTaxCodes } from '@/hooks/queries'
 import { useCreateTaxCode } from '@/hooks/mutations'
 import { useAuth } from '@/lib/auth'
-import { taxTypeLabels, TaxType } from '@/lib/enums'
+import { TaxType } from '@/lib/enums'
+import { useLabels } from '@/lib/labels'
 import { formatPercent } from '@/lib/format'
 import { toNumber } from '@/lib/utils'
 import type { TaxCode, TaxCodeRequest } from '@/lib/types'
 
-const taxCodeSchema = z.object({
-  code: z.string().min(1, 'Code is required').max(30),
-  name: z.string().min(2, 'Name is required').max(120),
-  ratePercent: z.coerce.number().min(0, 'Rate cannot be negative').max(100, 'Rate cannot exceed 100%'),
-  type: z.coerce.number().int().min(1).max(2),
-  taxPayableOrReceivableAccountId: z.string().min(1, 'Select the tax account'),
-})
+type Translate = (key: string, options?: Record<string, unknown>) => string
 
-type TaxCodeFormValues = z.infer<typeof taxCodeSchema>
+const taxCodeSchema = (t: Translate) =>
+  z.object({
+    code: z.string().min(1, t('tax.errCodeRequired')).max(30),
+    name: z.string().min(2, t('tax.errNameRequired')).max(120),
+    ratePercent: z.coerce.number().min(0, t('tax.errRateNegative')).max(100, t('tax.errRateMax')),
+    type: z.coerce.number().int().min(1).max(2),
+    taxPayableOrReceivableAccountId: z.string().min(1, t('tax.errSelectAccount')),
+  })
+
+type TaxCodeFormValues = z.infer<ReturnType<typeof taxCodeSchema>>
 
 export function TaxCodesPage() {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const { hasRole } = useAuth()
   const canManage = hasRole('Admin', 'Accountant')
 
@@ -47,38 +54,40 @@ export function TaxCodesPage() {
 
   const accountLabel = (accountId: string) => {
     const account = (accountsQuery.data ?? []).find((candidate) => candidate.id === accountId)
-    return account ? `${account.code} · ${account.name}` : '—'
+    return account ? `${account.code} · ${account.name}` : t('common.dash')
   }
 
   const columns = useMemo<ColumnDef<TaxCode>[]>(
     () => [
       {
         accessorKey: 'code',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Code" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.code')} />,
         cell: ({ row }) => <span className="font-mono text-xs font-medium">{row.original.code}</span>,
       },
       {
         accessorKey: 'name',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.name')} />,
         cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
       },
       {
         accessorKey: 'ratePercent',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Rate" align="right" />,
-        cell: ({ row }) => <div className="text-right font-medium tabular-nums">{formatPercent(row.original.ratePercent)}</div>,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('tax.rate')} align="right" />,
+        cell: ({ row }) => (
+          <div className="text-end font-medium tabular-nums">{formatPercent(row.original.ratePercent)}</div>
+        ),
       },
       {
         accessorKey: 'type',
-        header: 'Applies to',
+        header: t('tax.appliesTo'),
         cell: ({ row }) => (
           <Badge variant={row.original.type === TaxType.Sales ? 'default' : 'secondary'}>
-            {taxTypeLabels[row.original.type] ?? '—'}
+            {labels.taxType[row.original.type] ?? t('common.dash')}
           </Badge>
         ),
       },
       {
         id: 'account',
-        header: 'Tax account',
+        header: t('tax.taxAccount'),
         enableSorting: false,
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">{accountLabel(row.original.taxPayableOrReceivableAccountId)}</span>
@@ -86,40 +95,48 @@ export function TaxCodesPage() {
       },
       {
         accessorKey: 'isActive',
-        header: 'Status',
+        header: t('common.status'),
         cell: ({ row }) =>
-          row.original.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="outline">Inactive</Badge>,
+          row.original.isActive ? (
+            <Badge variant="success">{t('common.active')}</Badge>
+          ) : (
+            <Badge variant="outline">{t('common.inactive')}</Badge>
+          ),
       },
     ],
-    [accountsQuery.data],
+    [accountsQuery.data, labels, t],
   )
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Tax codes"
-        description="Line-level tax rates applied to invoices and bills. Sales tax posts to a payable account, purchase tax to a receivable account."
-        breadcrumbs={[{ label: 'Configuration' }, { label: 'Tax Codes' }]}
+        title={t('tax.title')}
+        description={t('tax.description')}
+        breadcrumbs={[{ label: t('nav.groups.configuration') }, { label: t('tax.breadcrumb') }]}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => taxCodesQuery.refetch()} loading={taxCodesQuery.isFetching}>
-              <RefreshCw className="h-4 w-4" /> Refresh
+              <RefreshCw className="h-4 w-4" /> {t('common.refresh')}
             </Button>
             <Button size="sm" disabled={!canManage} onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4" /> New tax code
+              <Plus className="h-4 w-4" /> {t('tax.newTaxCode')}
             </Button>
           </>
         }
       />
 
       {taxCodesQuery.error ? (
-        <ErrorState error={taxCodesQuery.error} onRetry={() => taxCodesQuery.refetch()} title="Could not load tax codes" />
+        <ErrorState
+          error={taxCodesQuery.error}
+          onRetry={() => taxCodesQuery.refetch()}
+          title={t('tax.couldNotLoad')}
+        />
       ) : (
         <DataTable
           columns={columns}
           data={taxCodesQuery.data ?? []}
           isLoading={taxCodesQuery.isLoading}
-          searchPlaceholder="Search tax codes…"
+          searchPlaceholder={t('tax.searchPlaceholder')}
           getRowId={(row) => row.id}
         />
       )}
@@ -130,15 +147,17 @@ export function TaxCodesPage() {
 }
 
 function CreateTaxCodeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const accountsQuery = useAccounts()
   const createTaxCode = useCreateTaxCode()
 
   const form = useForm<TaxCodeFormValues>({
-    resolver: zodResolver(taxCodeSchema),
+    resolver: zodResolver(taxCodeSchema(t)),
     defaultValues: { code: '', name: '', ratePercent: 0, type: TaxType.Sales, taxPayableOrReceivableAccountId: '' },
   })
 
-  const taxType = form.watch('type')
+  const taxType = useWatch({ control: form.control, name: 'type' })
   const accountOptions = useMemo(() => {
     const allowedType = taxType === TaxType.Sales ? 2 : 1 // Liability for sales tax, Asset for purchase tax
     return (accountsQuery.data ?? [])
@@ -174,9 +193,9 @@ function CreateTaxCodeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Percent className="h-4 w-4" /> New tax code
+            <Percent className="h-4 w-4" /> {t('tax.newTaxCodeTitle')}
           </DialogTitle>
-          <DialogDescription>Sales tax codes are selectable on invoice lines; purchase codes on bill lines.</DialogDescription>
+          <DialogDescription>{t('tax.newTaxCodeDescription')}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -184,21 +203,23 @@ function CreateTaxCodeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             <FormField
               control={form.control}
               name="code"
-              render={({ field }) => <TextField label="Code" placeholder="TAX10" required {...field} />}
+              render={({ field }) => (
+                <TextField label={t('common.code')} placeholder={t('tax.codePlaceholder')} required {...field} />
+              )}
             />
             <FormField
               control={form.control}
               name="type"
               render={({ field }) => (
                 <SelectField
-                  label="Type"
+                  label={t('common.type')}
                   required
                   value={field.value}
                   onChange={(value) => {
                     field.onChange(Number(value))
                     form.setValue('taxPayableOrReceivableAccountId', '')
                   }}
-                  options={Object.entries(taxTypeLabels).map(([value, label]) => ({ value, label }))}
+                  options={Object.entries(labels.taxType).map(([value, label]) => ({ value, label }))}
                 />
               )}
             />
@@ -206,14 +227,29 @@ function CreateTaxCodeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               control={form.control}
               name="name"
               render={({ field }) => (
-                <TextField label="Name" placeholder="Sales Tax 10%" required className="sm:col-span-2" {...field} />
+                <TextField
+                  label={t('common.name')}
+                  placeholder={t('tax.namePlaceholder')}
+                  required
+                  className="sm:col-span-2"
+                  {...field}
+                />
               )}
             />
             <FormField
               control={form.control}
               name="ratePercent"
               render={({ field }) => (
-                <TextField label="Rate %" type="number" step="any" min={0} max={100} className="text-right" required {...field} />
+                <TextField
+                  label={t('tax.ratePercent')}
+                  type="number"
+                  step="any"
+                  min={0}
+                  max={100}
+                  className="text-end"
+                  required
+                  {...field}
+                />
               )}
             />
             <FormField
@@ -221,7 +257,9 @@ function CreateTaxCodeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               name="taxPayableOrReceivableAccountId"
               render={({ field }) => (
                 <ComboboxField
-                  label={taxType === TaxType.Sales ? 'Tax payable account' : 'Tax receivable account'}
+                  label={
+                    taxType === TaxType.Sales ? t('tax.taxPayableAccount') : t('tax.taxReceivableAccount')
+                  }
                   required
                   options={accountOptions}
                   value={field.value}
@@ -236,10 +274,10 @@ function CreateTaxCodeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="submit" form="create-tax-code" loading={createTaxCode.isPending}>
-            Create tax code
+            {t('tax.create')}
           </Button>
         </DialogFooter>
       </DialogContent>

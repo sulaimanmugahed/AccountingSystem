@@ -1,4 +1,6 @@
+import * as React from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -10,16 +12,17 @@ import { TextField } from '@/components/ui/fields'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useAuth } from '@/lib/auth'
 
-const loginSchema = z.object({
-  email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
-  password: z.string().min(1, 'Password is required'),
-})
-
-type LoginValues = z.infer<typeof loginSchema>
+type LoginValues = { email: string; password: string }
 
 export function LoginPage() {
+  const { t } = useTranslation()
   const { login, isLoggingIn, loginError, isAuthenticated } = useAuth()
   const navigate = useNavigate()
+
+  const loginSchema = z.object({
+    email: z.string().min(1, t('auth.emailRequired')).email(t('validate.invalidEmail')),
+    password: z.string().min(1, t('auth.passwordRequired')),
+  })
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -48,44 +51,38 @@ export function LoginPage() {
             <Command className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-lg font-semibold text-white">Ledgerly</p>
-            <p className="text-xs text-sidebar-foreground/60">Accounting System client</p>
+            <p className="text-lg font-semibold text-white">{t('app.name')}</p>
+            <p className="text-xs text-sidebar-foreground/60">{t('auth.clientTagline')}</p>
           </div>
         </div>
 
         <div className="max-w-md space-y-6">
-          <h1 className="text-3xl font-semibold leading-tight text-white">
-            Double-entry accounting, from ledger to financial statements.
-          </h1>
+          <h1 className="text-3xl font-semibold leading-tight text-white">{t('auth.heroTitle')}</h1>
           <ul className="space-y-3 text-sm text-sidebar-foreground/80">
             <li className="flex gap-3">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-              JWT bearer auth with role-based access (Admin, Accountant, AR/AP Clerk, Viewer).
+              {t('auth.heroPoint1')}
             </li>
             <li className="flex gap-3">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-              Every invoice, bill, payment and depreciation run posts through one balanced journal engine.
+              {t('auth.heroPoint2')}
             </li>
             <li className="flex gap-3">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-              Statements, aging and cash flow computed live from the ledger.
+              {t('auth.heroPoint3')}
             </li>
           </ul>
         </div>
 
-        <p className="text-xs text-sidebar-foreground/50">
-          React · TanStack Query · TanStack Table · React Hook Form
-        </p>
+        <p className="text-xs text-sidebar-foreground/50">{t('auth.heroTech')}</p>
       </div>
 
       <div className="flex items-center justify-center p-6">
         <Card className="w-full max-w-md border-0 shadow-none sm:border sm:shadow-sm">
           <CardContent className="space-y-6 p-6 sm:p-8">
             <div className="space-y-1">
-              <h2 className="text-xl font-semibold">Sign in</h2>
-              <p className="text-sm text-muted-foreground">
-                Use the seeded demo administrator to explore the ledger.
-              </p>
+              <h2 className="text-xl font-semibold">{t('auth.signIn')}</h2>
+              <p className="text-sm text-muted-foreground">{t('auth.signInSubtitle')}</p>
             </div>
 
             {loginError ? (
@@ -101,7 +98,14 @@ export function LoginPage() {
                   control={form.control}
                   name="email"
                   render={({ field }) => (
-                    <TextField label="Email" type="email" autoComplete="username" placeholder="you@company.com" required {...field} />
+                    <TextField
+                      label={t('auth.email')}
+                      type="email"
+                      autoComplete="username"
+                      placeholder={t('auth.emailPlaceholder')}
+                      required
+                      {...field}
+                    />
                   )}
                 />
                 <FormField
@@ -109,7 +113,7 @@ export function LoginPage() {
                   name="password"
                   render={({ field }) => (
                     <TextField
-                      label="Password"
+                      label={t('auth.password')}
                       type="password"
                       autoComplete="current-password"
                       placeholder="••••••••"
@@ -120,17 +124,23 @@ export function LoginPage() {
                 />
                 <Button type="submit" className="w-full" loading={isLoggingIn}>
                   <LockKeyhole className="h-4 w-4" />
-                  Sign in
+                  {t('auth.signIn')}
                 </Button>
               </form>
             </Form>
 
             <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
-              <p className="font-medium text-foreground">Demo credentials</p>
-              <p className="mt-1 font-mono">admin@demo.local / Admin@12345</p>
+              <p className="font-medium text-foreground">{t('auth.demoTitle')}</p>
+              <p className="mt-1 font-mono" dir="ltr">admin@demo.local / Admin@12345</p>
               <p className="mt-2">
-                Running without the .NET API? Start the client with <span className="font-mono">npm run dev:mock</span> to
-                use the bundled in-browser mock of the same endpoints.
+                {t('auth.demoHint', { command: 'npm run dev:mock' })
+                  .split('npm run dev:mock')
+                  .map((part, index, parts) => (
+                    <React.Fragment key={index}>
+                      {part}
+                      {index < parts.length - 1 ? <span className="font-mono">npm run dev:mock</span> : null}
+                    </React.Fragment>
+                  ))}
               </p>
             </div>
           </CardContent>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { useFieldArray, useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
+import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -31,19 +32,22 @@ import { ErrorState, Money, SummaryRow } from '@/components/common/misc'
 import { useBankAccounts, useCustomerPayments, useCustomers, useInvoices } from '@/hooks/queries'
 import { useCreateCustomerPayment } from '@/hooks/mutations'
 import { useAuth } from '@/lib/auth'
-import { paymentMethodLabels, PaymentMethod } from '@/lib/enums'
+import { PaymentMethod } from '@/lib/enums'
+import { useLabels } from '@/lib/labels'
 import { formatDate, formatMoney, today } from '@/lib/format'
 import { toNumber } from '@/lib/utils'
-import { invoiceStatusLabels } from '@/lib/enums'
 import { invoiceStatusTone, type CustomerPayment } from '@/lib/types'
 
-const paymentSchema = z.object({
-  customerId: z.string().min(1, 'Select a customer'),
-  paymentDate: z.string().min(1, 'Payment date is required'),
-  amount: z.coerce.number().positive('Amount must be greater than zero'),
+type Translate = (key: string, options?: Record<string, unknown>) => string
+
+const paymentSchema = (t: Translate) =>
+  z.object({
+  customerId: z.string().min(1, t('payments.errSelectCustomer')),
+  paymentDate: z.string().min(1, t('payments.errPaymentDateRequired')),
+  amount: z.coerce.number().positive(t('payments.errAmountPositive')),
   method: z.coerce.number().int().min(1).max(6),
   referenceNumber: z.string().max(60).optional().or(z.literal('')),
-  bankAccountId: z.string().min(1, 'Select the bank account that received the funds'),
+  bankAccountId: z.string().min(1, t('payments.errSelectBank')),
   memo: z.string().max(300).optional().or(z.literal('')),
   applications: z.array(
     z.object({
@@ -53,9 +57,11 @@ const paymentSchema = z.object({
   ),
 })
 
-type PaymentFormValues = z.infer<typeof paymentSchema>
+type PaymentFormValues = z.infer<ReturnType<typeof paymentSchema>>
 
 export function CustomerPaymentsPage() {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const { hasRole } = useAuth()
   const canRecord = hasRole('Admin', 'Accountant', 'ARClerk')
 
@@ -74,49 +80,49 @@ export function CustomerPaymentsPage() {
   )
 
   const customerName = (customerId: string) =>
-    (customersQuery.data ?? []).find((customer) => customer.id === customerId)?.name ?? '—'
+    (customersQuery.data ?? []).find((customer) => customer.id === customerId)?.name ?? t('common.dash')
 
   const columns = useMemo<ColumnDef<CustomerPayment>[]>(
     () => [
       {
         accessorKey: 'paymentNumber',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Payment #" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('payments.paymentNumber')} />,
         cell: ({ row }) => <span className="font-mono text-xs font-medium">{row.original.paymentNumber}</span>,
       },
       {
         accessorKey: 'customerId',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Customer" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('payments.customer')} />,
         cell: ({ row }) => <span className="font-medium">{customerName(row.original.customerId)}</span>,
       },
       {
         accessorKey: 'paymentDate',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Date" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.date')} />,
         cell: ({ row }) => <span className="whitespace-nowrap">{formatDate(row.original.paymentDate)}</span>,
       },
       {
         accessorKey: 'amount',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" align="right" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.amount')} align="right" />,
         cell: ({ row }) => (
-          <div className="text-right font-medium">
+          <div className="text-end font-medium">
             <Money value={row.original.amount} />
           </div>
         ),
       },
       {
         accessorKey: 'unappliedAmount',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Unapplied" align="right" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('payments.unapplied')} align="right" />,
         cell: ({ row }) => (
-          <div className="text-right">
+          <div className="text-end">
             {row.original.unappliedAmount > 0 ? (
               <Badge variant="warning">{formatMoney(row.original.unappliedAmount)}</Badge>
             ) : (
-              <span className="text-muted-foreground">Fully applied</span>
+              <span className="text-muted-foreground">{t('payments.fullyApplied')}</span>
             )}
           </div>
         ),
       },
     ],
-    [customersQuery.data],
+    [customersQuery.data, labels, t],
   )
 
   const total = payments.reduce((sum, payment) => sum + payment.amount, 0)
@@ -124,39 +130,39 @@ export function CustomerPaymentsPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Customer payments"
-        description="Record a receipt, apply it against open invoices, and post cash against AR in one step. Unapplied amounts stay on account."
-        breadcrumbs={[{ label: 'Receivables' }, { label: 'Payments' }]}
+        title={t('payments.title')}
+        description={t('payments.description')}
+        breadcrumbs={[{ label: t('nav.groups.receivables') }, { label: t('payments.breadcrumb') }]}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => paymentsQuery.refetch()} loading={paymentsQuery.isFetching}>
-              <RefreshCw className="h-4 w-4" /> Refresh
+              <RefreshCw className="h-4 w-4" /> {t('common.refresh')}
             </Button>
             <Button size="sm" disabled={!canRecord} onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4" /> Record payment
+              <Plus className="h-4 w-4" /> {t('payments.record')}
             </Button>
           </>
         }
       />
 
       {paymentsQuery.error ? (
-        <ErrorState error={paymentsQuery.error} onRetry={() => paymentsQuery.refetch()} title="Could not load payments" />
+        <ErrorState error={paymentsQuery.error} onRetry={() => paymentsQuery.refetch()} title={t('payments.couldNotLoad')} />
       ) : (
         <DataTable
           columns={columns}
           data={payments}
           isLoading={paymentsQuery.isLoading}
-          searchPlaceholder="Search by payment number…"
+          searchPlaceholder={t('payments.searchPlaceholder')}
           getRowId={(row) => row.id}
           initialSorting={[{ id: 'paymentDate', desc: true }]}
           toolbar={
             <div className="flex items-center gap-2">
               <Select value={customerFilter} onValueChange={setCustomerFilter}>
                 <SelectTrigger className="h-8 w-[200px]">
-                  <SelectValue placeholder="All customers" />
+                  <SelectValue placeholder={t('payments.allCustomers')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All customers</SelectItem>
+                  <SelectItem value="all">{t('payments.allCustomers')}</SelectItem>
                   {(customersQuery.data ?? []).map((customer) => (
                     <SelectItem key={customer.id} value={customer.id}>
                       {customer.name}
@@ -164,7 +170,7 @@ export function CustomerPaymentsPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Badge variant="outline">Total {formatMoney(total)}</Badge>
+              <Badge variant="outline">{t('payments.total', { amount: formatMoney(total) })}</Badge>
             </div>
           }
         />
@@ -176,13 +182,15 @@ export function CustomerPaymentsPage() {
 }
 
 function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const customersQuery = useCustomers()
   const invoicesQuery = useInvoices()
   const bankAccountsQuery = useBankAccounts()
   const createPayment = useCreateCustomerPayment()
 
   const form = useForm<PaymentFormValues>({
-    resolver: zodResolver(paymentSchema),
+    resolver: zodResolver(paymentSchema(t)),
     defaultValues: {
       customerId: '',
       paymentDate: today(),
@@ -196,7 +204,7 @@ function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   })
 
   const { fields, replace } = useFieldArray({ control: form.control, name: 'applications' })
-  const watched = form.watch()
+  const watched = useWatch({ control: form.control })
 
   const openInvoices = useMemo(
     () =>
@@ -277,11 +285,8 @@ function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Record customer payment</DialogTitle>
-          <DialogDescription>
-            Cash is debited to the selected bank account and AR is credited. Applications reduce the open invoice
-            balances.
-          </DialogDescription>
+          <DialogTitle>{t('payments.recordTitle')}</DialogTitle>
+          <DialogDescription>{t('payments.description2')}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -292,12 +297,12 @@ function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                 name="customerId"
                 render={({ field }) => (
                   <ComboboxField
-                    label="Customer"
+                    label={t('payments.customer')}
                     required
                     options={customerOptions}
                     value={field.value}
                     onChange={handleCustomerChange}
-                    placeholder="Select customer"
+                    placeholder={t('payments.selectCustomerPlaceholder')}
                     allowClear={false}
                   />
                 )}
@@ -305,13 +310,21 @@ function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               <FormField
                 control={form.control}
                 name="paymentDate"
-                render={({ field }) => <DateField label="Payment date" required {...field} />}
+                render={({ field }) => <DateField label={t('payments.paymentDate')} required {...field} />}
               />
               <FormField
                 control={form.control}
                 name="amount"
                 render={({ field }) => (
-                  <TextField label="Amount received" type="number" step="any" min={0} className="text-right" required {...field} />
+                  <TextField
+                    label={t('payments.amount')}
+                    type="number"
+                    step="any"
+                    min={0}
+                    className="text-end"
+                    required
+                    {...field}
+                  />
                 )}
               />
               <FormField
@@ -319,10 +332,10 @@ function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                 name="method"
                 render={({ field }) => (
                   <SelectField
-                    label="Method"
+                    label={t('payments.method')}
                     value={field.value}
                     onChange={(value) => field.onChange(Number(value))}
-                    options={Object.entries(paymentMethodLabels).map(([value, label]) => ({ value, label }))}
+                    options={Object.entries(labels.paymentMethod).map(([value, label]) => ({ value, label }))}
                   />
                 )}
               />
@@ -330,7 +343,12 @@ function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                 control={form.control}
                 name="referenceNumber"
                 render={({ field }) => (
-                  <TextField label="Reference" placeholder="Wire / cheque number" {...field} value={field.value ?? ''} />
+                  <TextField
+                    label={t('common.reference')}
+                    placeholder={t('payments.referencePlaceholder')}
+                    {...field}
+                    value={field.value ?? ''}
+                  />
                 )}
               />
               <FormField
@@ -338,12 +356,12 @@ function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                 name="bankAccountId"
                 render={({ field }) => (
                   <SelectField
-                    label="Deposit to"
+                    label={t('payments.depositTo')}
                     required
                     value={field.value}
                     onChange={field.onChange}
                     options={bankAccountOptions}
-                    placeholder="Select bank account"
+                    placeholder={t('payments.selectBankAccount')}
                   />
                 )}
               />
@@ -351,7 +369,12 @@ function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                 control={form.control}
                 name="memo"
                 render={({ field }) => (
-                  <TextAreaField label="Memo" className="sm:col-span-3" {...field} value={field.value ?? ''} />
+                  <TextAreaField
+                    label={t('common.memo')}
+                    className="sm:col-span-3"
+                    {...field}
+                    value={field.value ?? ''}
+                  />
                 )}
               />
             </div>
@@ -359,14 +382,17 @@ function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             <div className="space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-medium">Apply to open invoices</p>
+                  <p className="text-sm font-medium">{t('payments.applyToOpen')}</p>
                   <p className="text-xs text-muted-foreground">
-                    {openInvoices.length} open invoice(s) · applied {formatMoney(applied)} · unapplied{' '}
-                    <span className={remaining < 0 ? 'text-destructive' : ''}>{formatMoney(remaining)}</span>
+                    {t('payments.openSummary', {
+                      count: openInvoices.length,
+                      applied: formatMoney(applied),
+                      remaining: formatMoney(remaining),
+                    })}
                   </p>
                 </div>
                 <Button type="button" variant="outline" size="sm" onClick={applyOldestFirst} disabled={!openInvoices.length}>
-                  <Wand2 className="h-4 w-4" /> Apply oldest first
+                  <Wand2 className="h-4 w-4" /> {t('payments.applyOldestFirst')}
                 </Button>
               </div>
 
@@ -374,11 +400,11 @@ function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Invoice</TableHead>
-                      <TableHead>Due</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Balance</TableHead>
-                      <TableHead className="w-[160px] text-right">Apply</TableHead>
+                      <TableHead>{t('invoices.invoiceNumber')}</TableHead>
+                      <TableHead>{t('common.dueDate')}</TableHead>
+                      <TableHead>{t('common.status')}</TableHead>
+                      <TableHead className="text-end">{t('invoices.balance')}</TableHead>
+                      <TableHead className="w-[160px] text-end">{t('payments.colApply')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -386,8 +412,8 @@ function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                       <TableRow>
                         <TableCell colSpan={5} className="h-20 text-center text-sm text-muted-foreground">
                           {watched.customerId
-                            ? 'This customer has no open invoices — the payment will be recorded as unapplied.'
-                            : 'Select a customer to list their open invoices.'}
+                            ? t('payments.noOpenInvoices')
+                            : t('payments.selectCustomerHint')}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -400,10 +426,10 @@ function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                             <TableCell>{formatDate(invoice.dueDate)}</TableCell>
                             <TableCell>
                               <Badge variant={invoiceStatusTone[invoice.status] ?? 'secondary'}>
-                                {invoiceStatusLabels[invoice.status]}
+                                {labels.invoiceStatus[invoice.status]}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-end">
                               <Money value={invoice.balance} />
                             </TableCell>
                             <TableCell>
@@ -416,7 +442,7 @@ function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                                     step="any"
                                     min={0}
                                     max={invoice.balance}
-                                    className="text-right tabular-nums"
+                                    className="text-end tabular-nums"
                                     value={amountField.value}
                                     onChange={(event) => amountField.onChange(event.target.value)}
                                   />
@@ -433,10 +459,10 @@ function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             </div>
 
             <div className="rounded-lg bg-muted/40 p-4">
-              <SummaryRow label="Payment amount" value={formatMoney(toNumber(watched.amount))} />
-              <SummaryRow label="Applied to invoices" value={formatMoney(applied)} />
+              <SummaryRow label={t('payments.paymentAmount')} value={formatMoney(toNumber(watched.amount))} />
+              <SummaryRow label={t('payments.appliedToInvoices')} value={formatMoney(applied)} />
               <SummaryRow
-                label="Unapplied credit"
+                label={t('payments.unappliedCredit')}
                 value={formatMoney(Math.max(remaining, 0))}
                 strong
                 className={remaining < 0 ? 'text-destructive' : undefined}
@@ -444,7 +470,7 @@ function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             </div>
             {remaining < -0.005 ? (
               <p className="text-xs font-medium text-destructive">
-                Applications exceed the payment amount. Reduce the applied amounts.
+                {t('payments.exceedsWarning')}
               </p>
             ) : null}
           </form>
@@ -452,7 +478,7 @@ function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             type="submit"
@@ -460,7 +486,7 @@ function RecordPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             loading={createPayment.isPending}
             disabled={remaining < -0.005 || toNumber(watched.amount) <= 0}
           >
-            <HandCoins className="h-4 w-4" /> Record payment
+            <HandCoins className="h-4 w-4" /> {t('payments.save')}
           </Button>
         </DialogFooter>
       </DialogContent>

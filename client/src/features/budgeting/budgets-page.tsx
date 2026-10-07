@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { useFieldArray, useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
+import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Plus, RefreshCw, Trash2 } from 'lucide-react'
@@ -22,26 +23,31 @@ import { EmptyState, ErrorState, Money } from '@/components/common/misc'
 import { useAccounts, useBudgets, useFiscalPeriods, useFiscalYears, useIncomeStatement } from '@/hooks/queries'
 import { useCreateBudget } from '@/hooks/mutations'
 import { useAuth } from '@/lib/auth'
-import { accountTypeLabels } from '@/lib/enums'
-import { endOfMonth, formatNumber, startOfYear } from '@/lib/format'
+import { useLabels } from '@/lib/labels'
+import { endOfMonth, formatMoney, formatNumber, startOfYear } from '@/lib/format'
 import { toNumber } from '@/lib/utils'
 
-const budgetSchema = z.object({
-  name: z.string().min(2, 'Budget name is required').max(120),
-  fiscalYearId: z.string().min(1, 'Select the fiscal year'),
-  lines: z
-    .array(
-      z.object({
-        accountId: z.string().min(1, 'Select an account'),
-        annualAmount: z.coerce.number().min(0),
-      }),
-    )
-    .min(1, 'Add at least one account'),
-})
+type Translate = (key: string, options?: Record<string, unknown>) => string
 
-type BudgetFormValues = z.infer<typeof budgetSchema>
+const budgetSchema = (t: Translate) =>
+  z.object({
+    name: z.string().min(2, t('budgets.errNameRequired')).max(120),
+    fiscalYearId: z.string().min(1, t('budgets.errSelectYear')),
+    lines: z
+      .array(
+        z.object({
+          accountId: z.string().min(1, t('budgets.errSelectAccount')),
+          annualAmount: z.coerce.number().min(0),
+        }),
+      )
+      .min(1, t('budgets.errAddAccount')),
+  })
+
+type BudgetFormValues = z.infer<ReturnType<typeof budgetSchema>>
 
 export function BudgetsPage() {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const { hasRole } = useAuth()
   const canManage = hasRole('Admin', 'Accountant')
 
@@ -56,7 +62,7 @@ export function BudgetsPage() {
 
   const accountLabel = (accountId: string) => {
     const account = (accountsQuery.data ?? []).find((candidate) => candidate.id === accountId)
-    return account ? `${account.code} · ${account.name}` : '—'
+    return account ? `${account.code} · ${account.name}` : t('common.dash')
   }
 
   const revenueActual = incomeStatement.data?.totalRevenue ?? 0
@@ -65,16 +71,16 @@ export function BudgetsPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Budgets"
-        description="Annual budgets spread across fiscal periods by account — compare against actuals to track performance."
-        breadcrumbs={[{ label: 'Configuration' }, { label: 'Budgets' }]}
+        title={t('budgets.title')}
+        description={t('budgets.description')}
+        breadcrumbs={[{ label: t('nav.groups.configuration') }, { label: t('budgets.breadcrumb') }]}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => budgetsQuery.refetch()} loading={budgetsQuery.isFetching}>
-              <RefreshCw className="h-4 w-4" /> Refresh
+              <RefreshCw className="h-4 w-4" /> {t('common.refresh')}
             </Button>
             <Button size="sm" disabled={!canManage} onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4" /> New budget
+              <Plus className="h-4 w-4" /> {t('budgets.newBudget')}
             </Button>
           </>
         }
@@ -83,38 +89,44 @@ export function BudgetsPage() {
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
           <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Budgets</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('budgets.count')}</p>
             <p className="text-2xl font-semibold tabular-nums">{budgets.length}</p>
-            <p className="text-xs text-muted-foreground">Total budgeted {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(budgetsTotal)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">YTD revenue actual</p>
-            <p className="text-2xl font-semibold tabular-nums text-success">
-              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(revenueActual)}
+            <p className="text-xs text-muted-foreground">
+              {t('budgets.totalBudgeted', { amount: formatMoney(budgetsTotal) })}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">YTD expense actual</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('budgets.ytdRevenue')}</p>
+            <p className="text-2xl font-semibold tabular-nums text-success">
+              {formatMoney(revenueActual)}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('budgets.ytdExpense')}</p>
             <p className="text-2xl font-semibold tabular-nums text-destructive">
-              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(expenseActual)}
+              {formatMoney(expenseActual)}
             </p>
           </CardContent>
         </Card>
       </div>
 
       {budgetsQuery.error ? (
-        <ErrorState error={budgetsQuery.error} onRetry={() => budgetsQuery.refetch()} title="Could not load budgets" />
+        <ErrorState
+          error={budgetsQuery.error}
+          onRetry={() => budgetsQuery.refetch()}
+          title={t('budgets.couldNotLoad')}
+        />
       ) : budgets.length === 0 && !budgetsQuery.isLoading ? (
         <EmptyState
-          title="No budgets yet"
-          description="Create a budget to compare planned versus actual revenue and expenses."
+          title={t('budgets.noBudgets')}
+          description={t('budgets.noBudgetsHint')}
           action={
             <Button size="sm" disabled={!canManage} onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4" /> New budget
+              <Plus className="h-4 w-4" /> {t('budgets.newBudget')}
             </Button>
           }
         />
@@ -135,17 +147,21 @@ export function BudgetsPage() {
                     <CardTitle className="flex items-center gap-2 text-base">
                       {budget.name}
                       <Badge variant={budget.isActive ? 'success' : 'outline'}>
-                        {budget.isActive ? 'Active' : 'Inactive'}
+                        {budget.isActive ? t('budgets.active') : t('budgets.inactive')}
                       </Badge>
                     </CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      {fiscalYear?.name ?? 'Fiscal year'} · {byAccount.size} account(s) · {budget.lines.length} period lines
+                      {t('budgets.budgetMeta', {
+                        year: fiscalYear?.name ?? t('budgets.fiscalYearFallback'),
+                        accounts: byAccount.size,
+                        lines: budget.lines.length,
+                      })}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Annual total</p>
+                  <div className="text-end">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('budgets.annualTotal')}</p>
                     <p className="text-lg font-semibold tabular-nums">
-                      {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(total)}
+                      {formatMoney(total)}
                     </p>
                   </div>
                 </CardHeader>
@@ -153,10 +169,10 @@ export function BudgetsPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Account</TableHead>
-                        <TableHead className="text-right">Annual budget</TableHead>
-                        <TableHead className="text-right">Monthly average</TableHead>
-                        <TableHead className="text-right">Share of budget</TableHead>
+                        <TableHead>{t('budgets.account')}</TableHead>
+                        <TableHead className="text-end">{t('budgets.annualBudget')}</TableHead>
+                        <TableHead className="text-end">{t('budgets.monthlyAverage')}</TableHead>
+                        <TableHead className="text-end">{t('budgets.shareOfBudget')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -167,19 +183,21 @@ export function BudgetsPage() {
                             <TableCell>
                               <span className="font-mono text-xs">{account?.code}</span> {account?.name}
                               {account ? (
-                                <span className="ml-2 text-xs text-muted-foreground">
-                                  {accountTypeLabels[account.type]}
+                                <span className="ms-2 text-xs text-muted-foreground">
+                                  {labels.accountType[account.type]}
                                 </span>
                               ) : null}
                             </TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-end">
                               <Money value={amount} />
                             </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
+                            <TableCell className="text-end text-muted-foreground">
                               <Money value={amount / 12} />
                             </TableCell>
-                            <TableCell className="text-right tabular-nums">
-                              {total > 0 ? `${formatNumber((amount / total) * 100, 1)}%` : '—'}
+                            <TableCell className="text-end tabular-nums">
+                              {total > 0
+                                ? `${formatNumber((amount / total) * 100, 1)}%`
+                                : t('common.dash')}
                             </TableCell>
                           </TableRow>
                         )
@@ -211,12 +229,13 @@ function CreateBudgetDialog({
   onOpenChange: (open: boolean) => void
   accountLabel: (accountId: string) => string
 }) {
+  const { t } = useTranslation()
   const accountsQuery = useAccounts()
   const yearsQuery = useFiscalYears()
   const createBudget = useCreateBudget()
 
   const form = useForm<BudgetFormValues>({
-    resolver: zodResolver(budgetSchema),
+    resolver: zodResolver(budgetSchema(t)),
     defaultValues: {
       name: '',
       fiscalYearId: '',
@@ -225,9 +244,9 @@ function CreateBudgetDialog({
   })
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'lines' })
-  const fiscalYearId = form.watch('fiscalYearId')
+  const fiscalYearId = useWatch({ control: form.control, name: 'fiscalYearId' })
   const periodsQuery = useFiscalPeriods(fiscalYearId)
-  const watchedLines = form.watch('lines')
+  const watchedLines = useWatch({ control: form.control, name: 'lines' })
 
   const accountOptions = useMemo(
     () =>
@@ -242,7 +261,7 @@ function CreateBudgetDialog({
   const onSubmit = (values: BudgetFormValues) => {
     const periods = periodsQuery.data ?? []
     if (periods.length === 0) {
-      form.setError('fiscalYearId', { message: 'The selected fiscal year has no periods.' })
+      form.setError('fiscalYearId', { message: t('budgets.errNoPeriods') })
       return
     }
 
@@ -278,10 +297,8 @@ function CreateBudgetDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>New budget</DialogTitle>
-          <DialogDescription>
-            Enter an annual amount per account — it is spread evenly across the periods of the selected fiscal year.
-          </DialogDescription>
+          <DialogTitle>{t('budgets.newBudgetTitle')}</DialogTitle>
+          <DialogDescription>{t('budgets.newBudgetDescription')}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -291,7 +308,12 @@ function CreateBudgetDialog({
                 control={form.control}
                 name="name"
                 render={({ field }) => (
-                  <TextField label="Budget name" placeholder="Operating Budget FY2026" required {...field} />
+                  <TextField
+                    label={t('budgets.budgetName')}
+                    placeholder={t('budgets.budgetNamePlaceholder')}
+                    required
+                    {...field}
+                  />
                 )}
               />
               <FormField
@@ -299,12 +321,12 @@ function CreateBudgetDialog({
                 name="fiscalYearId"
                 render={({ field }) => (
                   <SelectField
-                    label="Fiscal year"
+                    label={t('budgets.fiscalYear')}
                     required
                     value={field.value}
                     onChange={field.onChange}
                     options={(yearsQuery.data ?? []).map((year) => ({ value: year.id, label: year.name }))}
-                    placeholder="Select fiscal year"
+                    placeholder={t('budgets.selectFiscalYear')}
                   />
                 )}
               />
@@ -312,9 +334,9 @@ function CreateBudgetDialog({
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Accounts</p>
+                <p className="text-sm font-medium">{t('budgets.accounts')}</p>
                 <Button type="button" variant="outline" size="sm" onClick={() => append({ accountId: '', annualAmount: 0 })}>
-                  <Plus className="h-4 w-4" /> Add account
+                  <Plus className="h-4 w-4" /> {t('budgets.addAccount')}
                 </Button>
               </div>
 
@@ -326,11 +348,11 @@ function CreateBudgetDialog({
                       name={`lines.${index}.accountId`}
                       render={({ field: accountField }) => (
                         <ComboboxField
-                          label={index === 0 ? 'Account' : undefined}
+                          label={index === 0 ? t('budgets.account') : undefined}
                           options={accountOptions}
                           value={accountField.value}
                           onChange={(value) => accountField.onChange(value ?? '')}
-                          placeholder="Select account"
+                          placeholder={t('budgets.selectAccount')}
                           allowClear={false}
                         />
                       )}
@@ -340,11 +362,11 @@ function CreateBudgetDialog({
                       name={`lines.${index}.annualAmount`}
                       render={({ field: amountField }) => (
                         <TextField
-                          label={index === 0 ? 'Annual amount' : undefined}
+                          label={index === 0 ? t('budgets.annualAmount') : undefined}
                           type="number"
                           step="any"
                           min={0}
-                          className="text-right"
+                          className="text-end"
                           {...amountField}
                         />
                       )}
@@ -361,18 +383,26 @@ function CreateBudgetDialog({
 
             <div className="flex items-center justify-between rounded-lg bg-muted/40 p-4 text-sm">
               <span className="text-muted-foreground">
-                {periodsQuery.data?.length ?? 0} period(s) · {watchedLines.length} account(s)
+                {t('budgets.periodsAccounts', {
+                  periods: periodsQuery.data?.length ?? 0,
+                  accounts: watchedLines.length,
+                })}
               </span>
               <span className="font-medium tabular-nums">
-                Annual total{' '}
-                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(annualTotal)}
+                {t('budgets.annualTotal')} {formatMoney(annualTotal)}
               </span>
             </div>
 
             {watchedLines.length ? (
               <p className="text-xs text-muted-foreground">
-                Preview: {watchedLines.slice(0, 3).map((line) => accountLabel(line.accountId)).filter((label) => label !== '—').join(' · ')}
-                {watchedLines.length > 3 ? ` · +${watchedLines.length - 3} more` : ''}
+                {t('budgets.preview', {
+                  names: watchedLines
+                    .slice(0, 3)
+                    .map((line) => accountLabel(line.accountId))
+                    .filter((label) => label !== t('common.dash'))
+                    .join(' · '),
+                })}
+                {watchedLines.length > 3 ? ` · ${t('budgets.more', { count: watchedLines.length - 3 })}` : ''}
               </p>
             ) : null}
           </form>
@@ -380,10 +410,10 @@ function CreateBudgetDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="submit" form="create-budget" loading={createBudget.isPending}>
-            Create budget
+            {t('budgets.create')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -39,24 +40,27 @@ import { ErrorState, StatCard } from '@/components/common/misc'
 import { useAccounts } from '@/hooks/queries'
 import { useCreateAccount, useDeactivateAccount } from '@/hooks/mutations'
 import { useAuth } from '@/lib/auth'
-import { accountTypeLabels } from '@/lib/enums'
 import { AccountType, NormalBalance } from '@/lib/enums'
+import { useLabels } from '@/lib/labels'
 import type { Account, CreateAccountRequest } from '@/lib/types'
 
-const accountSchema = z.object({
+type Translate = (key: string, options?: Record<string, unknown>) => string
+
+const accountSchema = (t: Translate) =>
+  z.object({
   code: z
     .string()
-    .min(1, 'Account code is required')
-    .max(20, 'Keep the code under 20 characters')
-    .regex(/^[0-9A-Za-z][0-9A-Za-z.\-]*$/, 'Use letters, digits, dots or dashes only'),
-  name: z.string().min(2, 'Account name is required').max(120),
+    .min(1, t('accounts.codeRequired'))
+    .max(20, t('accounts.codeMax'))
+    .regex(/^[0-9A-Za-z][0-9A-Za-z.\-]*$/, t('accounts.codeFormat')),
+  name: z.string().min(2, t('accounts.nameRequired')).max(120),
   type: z.coerce.number().int().min(1).max(5),
   subType: z.string().max(60).optional().or(z.literal('')),
   parentAccountId: z.string().nullable().optional(),
   description: z.string().max(400).optional().or(z.literal('')),
 })
 
-type AccountFormValues = z.infer<typeof accountSchema>
+type AccountFormValues = z.infer<ReturnType<typeof accountSchema>>
 
 const typeTone: Record<number, 'default' | 'secondary' | 'success' | 'warning' | 'outline'> = {
   [AccountType.Asset]: 'default',
@@ -67,6 +71,8 @@ const typeTone: Record<number, 'default' | 'secondary' | 'success' | 'warning' |
 }
 
 export function AccountsPage() {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const { hasRole } = useAuth()
   const canManage = hasRole('Admin', 'Accountant')
 
@@ -100,12 +106,12 @@ export function AccountsPage() {
     () => [
       {
         accessorKey: 'code',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Code" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('accounts.code')} />,
         cell: ({ row }) => <span className="font-mono text-xs font-medium">{row.original.code}</span>,
       },
       {
         accessorKey: 'name',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Account" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('accounts.account')} />,
         cell: ({ row }) => (
           <div className="min-w-[200px]">
             <p className="font-medium">{row.original.name}</p>
@@ -117,32 +123,34 @@ export function AccountsPage() {
       },
       {
         accessorKey: 'type',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Type" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.type')} />,
         cell: ({ row }) => (
           <Badge variant={typeTone[row.original.type] ?? 'secondary'}>
-            {accountTypeLabels[row.original.type] ?? '—'}
+            {labels.accountType[row.original.type] ?? t('common.dash')}
           </Badge>
         ),
         filterFn: (row, _columnId, filterValue) => String(row.original.type) === String(filterValue),
       },
       {
         accessorKey: 'normalBalance',
-        header: 'Normal balance',
+        header: t('accounts.normalBalance'),
         enableSorting: false,
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">
-            {row.original.normalBalance === NormalBalance.Debit ? 'Debit' : 'Credit'}
+            {row.original.normalBalance === NormalBalance.Debit
+              ? labels.normalBalance[NormalBalance.Debit]
+              : labels.normalBalance[NormalBalance.Credit]}
           </span>
         ),
       },
       {
         accessorKey: 'isActive',
-        header: 'Status',
+        header: t('common.status'),
         cell: ({ row }) =>
           row.original.isActive ? (
-            <Badge variant="success">Active</Badge>
+            <Badge variant="success">{t('common.active')}</Badge>
           ) : (
-            <Badge variant="outline">Inactive</Badge>
+            <Badge variant="outline">{t('common.inactive')}</Badge>
           ),
       },
       {
@@ -166,7 +174,7 @@ export function AccountsPage() {
                   onClick={() => setAccountToDeactivate(row.original)}
                   className="text-destructive focus:text-destructive"
                 >
-                  <Power /> Deactivate
+                  <Power /> {t('accounts.deactivate')}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -174,53 +182,53 @@ export function AccountsPage() {
         ),
       },
     ],
-    [canManage],
+    [canManage, labels, t],
   )
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Chart of accounts"
-        description="Every account the posting engine can post to. System accounts are tagged so invoices, bills and tax codes resolve their default GL accounts automatically."
-        breadcrumbs={[{ label: 'General Ledger' }, { label: 'Chart of Accounts' }]}
+        title={t('accounts.title')}
+        description={t('accounts.description')}
+        breadcrumbs={[{ label: t('accounts.breadcrumbGl') }, { label: t('accounts.breadcrumbAccounts') }]}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => accountsQuery.refetch()} loading={accountsQuery.isFetching}>
-              <RefreshCw className="h-4 w-4" /> Refresh
+              <RefreshCw className="h-4 w-4" /> {t('common.refresh')}
             </Button>
             <Button size="sm" disabled={!canManage} onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4" /> New account
+              <Plus className="h-4 w-4" /> {t('accounts.newAccount')}
             </Button>
           </>
         }
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Accounts" value={summary.total} hint={`${summary.active} active`} />
-        <StatCard label="Asset accounts" value={summary.assets} />
-        <StatCard label="Revenue accounts" value={summary.revenue} />
-        <StatCard label="Expense accounts" value={summary.expenses} />
+        <StatCard label={t('accounts.statAccounts')} value={summary.total} hint={t('accounts.statActive', { count: summary.active })} />
+        <StatCard label={t('accounts.statAssets')} value={summary.assets} />
+        <StatCard label={t('accounts.statRevenue')} value={summary.revenue} />
+        <StatCard label={t('accounts.statExpenses')} value={summary.expenses} />
       </div>
 
       {accountsQuery.error ? (
-        <ErrorState error={accountsQuery.error} onRetry={() => accountsQuery.refetch()} title="Could not load the chart of accounts" />
+        <ErrorState error={accountsQuery.error} onRetry={() => accountsQuery.refetch()} title={t('accounts.couldNotLoad')} />
       ) : (
         <DataTable
           columns={columns}
           data={filtered}
           isLoading={accountsQuery.isLoading}
-          searchPlaceholder="Search accounts by code or name…"
+          searchPlaceholder={t('accounts.searchPlaceholder')}
           initialSorting={[{ id: 'code', desc: false }]}
           getRowId={(row) => row.id}
           toolbar={
             <>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger className="h-8 w-[170px]">
-                  <SelectValue placeholder="All account types" />
+                  <SelectValue placeholder={t('accounts.allTypes')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All account types</SelectItem>
-                  {Object.entries(accountTypeLabels).map(([value, label]) => (
+                  <SelectItem value="all">{t('accounts.allTypes')}</SelectItem>
+                  {Object.entries(labels.accountType).map(([value, label]) => (
                     <SelectItem key={value} value={value}>
                       {label}
                     </SelectItem>
@@ -232,7 +240,7 @@ export function AccountsPage() {
                 size="sm"
                 onClick={() => setIncludeInactive((value) => !value)}
               >
-                {includeInactive ? 'Showing inactive' : 'Active only'}
+                {includeInactive ? t('common.showInactive') : t('common.activeOnly')}
               </Button>
             </>
           }
@@ -249,13 +257,15 @@ export function AccountsPage() {
       <ConfirmDialog
         open={!!accountToDeactivate}
         onOpenChange={(open) => !open && setAccountToDeactivate(null)}
-        title="Deactivate account?"
+        title={t('accounts.deactivateTitle')}
         description={
           accountToDeactivate
-            ? `${accountToDeactivate.code} · ${accountToDeactivate.name} will no longer accept new postings. Historical entries are unaffected.`
+            ? t('accounts.deactivateDescription', {
+                account: `${accountToDeactivate.code} · ${accountToDeactivate.name}`,
+              })
             : undefined
         }
-        confirmLabel="Deactivate"
+        confirmLabel={t('accounts.deactivate')}
         destructive
         loading={deactivateAccount.isPending}
         onConfirm={() => {
@@ -281,9 +291,11 @@ function CreateAccountDialog({
   accounts: Account[]
   onCreated: () => void
 }) {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const createAccount = useCreateAccount()
   const form = useForm<AccountFormValues>({
-    resolver: zodResolver(accountSchema),
+    resolver: zodResolver(accountSchema(t)),
     defaultValues: { code: '', name: '', type: AccountType.Asset, subType: '', parentAccountId: null, description: '' },
   })
 
@@ -323,10 +335,8 @@ function CreateAccountDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>New GL account</DialogTitle>
-          <DialogDescription>
-            Add an account to the chart. The normal balance is derived from the account type on the server.
-          </DialogDescription>
+          <DialogTitle>{t('accounts.newAccountTitle')}</DialogTitle>
+          <DialogDescription>{t('accounts.newAccountDescription')}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -334,18 +344,18 @@ function CreateAccountDialog({
             <FormField
               control={form.control}
               name="code"
-              render={({ field }) => <TextField label="Code" placeholder="1010" required {...field} />}
+              render={({ field }) => <TextField label={t('accounts.fieldCode')} placeholder="1010" required {...field} />}
             />
             <FormField
               control={form.control}
               name="type"
               render={({ field }) => (
                 <SelectField
-                  label="Type"
+                  label={t('accounts.fieldType')}
                   required
                   value={field.value}
                   onChange={(value) => field.onChange(Number(value))}
-                  options={Object.entries(accountTypeLabels).map(([value, label]) => ({
+                  options={Object.entries(labels.accountType).map(([value, label]) => ({
                     value,
                     label,
                   }))}
@@ -356,14 +366,25 @@ function CreateAccountDialog({
               control={form.control}
               name="name"
               render={({ field }) => (
-                <TextField label="Name" placeholder="Petty Cash" required className="sm:col-span-2" {...field} />
+                <TextField
+                  label={t('accounts.fieldName')}
+                  placeholder={t('accounts.namePlaceholder')}
+                  required
+                  className="sm:col-span-2"
+                  {...field}
+                />
               )}
             />
             <FormField
               control={form.control}
               name="subType"
               render={({ field }) => (
-                <TextField label="Sub-type" placeholder="Current Asset" {...field} value={field.value ?? ''} />
+                <TextField
+                  label={t('accounts.fieldSubType')}
+                  placeholder={t('accounts.subTypePlaceholder')}
+                  {...field}
+                  value={field.value ?? ''}
+                />
               )}
             />
             <FormField
@@ -371,11 +392,11 @@ function CreateAccountDialog({
               name="parentAccountId"
               render={({ field }) => (
                 <ComboboxField
-                  label="Parent account"
+                  label={t('accounts.fieldParent')}
                   options={parentOptions}
                   value={field.value ?? null}
                   onChange={(value) => field.onChange(value)}
-                  placeholder="None"
+                  placeholder={t('common.none')}
                 />
               )}
             />
@@ -384,8 +405,8 @@ function CreateAccountDialog({
               name="description"
               render={({ field }) => (
                 <TextAreaField
-                  label="Description"
-                  placeholder="Optional notes shown in reports"
+                  label={t('accounts.fieldDescription')}
+                  placeholder={t('accounts.descriptionPlaceholder')}
                   className="sm:col-span-2"
                   {...field}
                   value={field.value ?? ''}
@@ -397,10 +418,10 @@ function CreateAccountDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="submit" form="create-account-form" loading={createAccount.isPending}>
-            Create account
+            {t('accounts.createAccount')}
           </Button>
         </DialogFooter>
       </DialogContent>

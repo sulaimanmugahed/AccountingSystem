@@ -69,6 +69,11 @@ if (!dom.window.matchMedia) {
 }
 globalAny.matchMedia = dom.window.matchMedia
 
+// jsdom omits a few layout APIs Radix uses.
+;(dom.window.Element.prototype as any).scrollIntoView = () => {}
+;(dom.window.Element.prototype as any).hasPointerCapture = () => false
+;(dom.window.Element.prototype as any).releasePointerCapture = () => {}
+
 class Observer {
   observe() {}
   unobserve() {}
@@ -329,6 +334,91 @@ async function main() {
     queryClient.clear()
   }
 
+
+  /* --------------------- journal-entry flow (field array + account comboboxes) */
+  const jeContainer = dom.window.document.createElement('div')
+  dom.window.document.body.appendChild(jeContainer)
+  const jeRoot = createRoot(jeContainer)
+  const beforeJe = errors.length
+
+  await act(async () => {
+    jeRoot.render(
+      React.createElement(
+        ThemeProvider,
+        null,
+        React.createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          React.createElement(
+            MemoryRouter,
+            { initialEntries: ['/gl/journal-entries'] },
+            React.createElement(AuthProvider, null, React.createElement(TooltipProvider, null, React.createElement(App, null))),
+          ),
+        ),
+      ),
+    )
+  })
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 900))
+  })
+
+  const clickElement = async (element: Element | undefined | null, settle = 300) => {
+    await act(async () => {
+      element?.dispatchEvent(new dom.window.PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
+      element?.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }))
+      await new Promise((resolve) => setTimeout(resolve, settle))
+    })
+  }
+
+  const pickAccount = async (lineIndex: number, accountLabel: string) => {
+    const dialog = dom.window.document.querySelector('[role="dialog"]')
+    const triggers = Array.from(dialog?.querySelectorAll('button[role="combobox"]') ?? []) as HTMLElement[]
+    await clickElement(triggers[lineIndex])
+    const option = Array.from(dom.window.document.querySelectorAll('button')).find((button: Element) =>
+      (button.textContent ?? '').includes(accountLabel),
+    ) as HTMLButtonElement | undefined
+    await clickElement(option, 200)
+    return Boolean(option)
+  }
+
+  await clickElement(findButton('New entry'), 400)
+  const pickedCash = await pickAccount(0, '1000 · Cash and Bank')
+  const pickedRevenue = await pickAccount(1, '4000 · Sales Revenue')
+
+  await act(async () => {
+    const memo = dom.window.document.querySelector('[name="memo"]')
+    const debit = dom.window.document.querySelector('[name="lines.0.debit"]')
+    const credit = dom.window.document.querySelector('[name="lines.1.credit"]')
+    if (memo) setValue(memo, 'Render smoke journal')
+    if (debit) setValue(debit, '125.25')
+    if (credit) setValue(credit, '125.25')
+    await new Promise((resolve) => setTimeout(resolve, 150))
+  })
+
+  await clickElement(findButton('Post entry'), 1200)
+
+  const jeText = jeContainer.textContent ?? ''
+  const jeErrors = errors.slice(beforeJe)
+  if (jeErrors.length) {
+    failures += 1
+    console.log(`  ✗ journal-entry flow → ${jeErrors[0]?.slice(0, 200)}`)
+  } else if (!pickedCash || !pickedRevenue) {
+    failures += 1
+    console.log('  ✗ journal-entry flow → could not pick accounts from the combobox list')
+  } else if (!jeText.includes('Render smoke journal')) {
+    const bodyText = (dom.window.document.body.textContent ?? '').replace(/\s+/g, ' ')
+    failures += 1
+    console.log(`  ✗ journal-entry flow → entry never appeared in the ledger | body: ${bodyText.slice(-220)}`)
+  } else {
+    console.log('  ✓ journal-entry flow (field array, account comboboxes, balanced post → ledger)')
+  }
+
+  await act(async () => {
+    jeRoot.unmount()
+  })
+  jeContainer.remove()
+  queryClient.clear()
+
   const openButton = findButton('New account')
   await act(async () => {
     openButton?.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
@@ -447,7 +537,7 @@ async function main() {
 
   console.error = originalError
 
-  const totalChecks = routesToTest.length + dialogChecks.length + 3
+  const totalChecks = routesToTest.length + dialogChecks.length + 4
   console.log(`\n${failures === 0 ? '✅' : '❌'} ${totalChecks - failures}/${totalChecks} checks passed`)
   // jsdom keeps timers/handles alive — exit explicitly (after flushing stdout).
   await new Promise((resolve) => setTimeout(resolve, 50))

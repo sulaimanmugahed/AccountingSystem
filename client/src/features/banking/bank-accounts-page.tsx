@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -29,19 +30,23 @@ import { formatDate, formatMoney, today } from '@/lib/format'
 import { toNumber } from '@/lib/utils'
 import type { BankAccount } from '@/lib/types'
 
-const bankAccountSchema = z.object({
-  name: z.string().min(2, 'Account name is required').max(120),
-  bankName: z.string().max(120).optional().or(z.literal('')),
-  accountNumberMasked: z.string().max(40).optional().or(z.literal('')),
-  glAccountId: z.string().min(1, 'Map the account to a GL account'),
-  currencyCode: z.string().length(3),
-  openingBalance: z.coerce.number().min(0, 'Opening balance cannot be negative'),
-  openingBalanceDate: z.string().min(1, 'Opening balance date is required'),
-})
+type Translate = (key: string, options?: Record<string, unknown>) => string
 
-type BankAccountFormValues = z.infer<typeof bankAccountSchema>
+const bankAccountSchema = (t: Translate) =>
+  z.object({
+    name: z.string().min(2, t('banking.errNameRequired')).max(120),
+    bankName: z.string().max(120).optional().or(z.literal('')),
+    accountNumberMasked: z.string().max(40).optional().or(z.literal('')),
+    glAccountId: z.string().min(1, t('banking.errMapGlAccount')),
+    currencyCode: z.string().length(3),
+    openingBalance: z.coerce.number().min(0, t('banking.errOpeningBalanceNegative')),
+    openingBalanceDate: z.string().min(1, t('banking.errOpeningBalanceDateRequired')),
+  })
+
+type BankAccountFormValues = z.infer<ReturnType<typeof bankAccountSchema>>
 
 export function BankAccountsPage() {
+  const { t } = useTranslation()
   const { hasRole } = useAuth()
   const canManage = hasRole('Admin', 'Accountant')
 
@@ -52,7 +57,7 @@ export function BankAccountsPage() {
     () => [
       {
         accessorKey: 'name',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Account" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('banking.accountName')} />,
         cell: ({ row }) => (
           <div className="flex items-center gap-3">
             <div className="rounded-lg bg-muted p-2">
@@ -61,7 +66,8 @@ export function BankAccountsPage() {
             <div>
               <p className="font-medium">{row.original.name}</p>
               <p className="text-xs text-muted-foreground">
-                {row.original.bankName ?? '—'} {row.original.accountNumberMasked ? `· ${row.original.accountNumberMasked}` : ''}
+                {row.original.bankName ?? t('common.dash')}{' '}
+                {row.original.accountNumberMasked ? `· ${row.original.accountNumberMasked}` : ''}
               </p>
             </div>
           </div>
@@ -69,14 +75,14 @@ export function BankAccountsPage() {
       },
       {
         accessorKey: 'currencyCode',
-        header: 'Currency',
+        header: t('common.currency'),
         cell: ({ row }) => <Badge variant="secondary">{row.original.currencyCode}</Badge>,
       },
       {
         accessorKey: 'openingBalance',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Opening balance" align="right" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('banking.openingBalance')} align="right" />,
         cell: ({ row }) => (
-          <div className="text-right">
+          <div className="text-end">
             <Money value={row.original.openingBalance} currency={row.original.currencyCode} />
             <p className="text-xs text-muted-foreground">{formatDate(row.original.openingBalanceDate)}</p>
           </div>
@@ -91,42 +97,46 @@ export function BankAccountsPage() {
           <div className="flex justify-end">
             <Button variant="ghost" size="sm" asChild>
               <Link to={`/banking/accounts/${row.original.id}`}>
-                Open <ArrowRight className="h-4 w-4" />
+                {t('banking.open')} <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
           </div>
         ),
       },
     ],
-    [],
+    [t],
   )
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Bank accounts"
-        description="Track cash, record bank transactions against their GL account, and reconcile statements month by month."
-        breadcrumbs={[{ label: 'Banking' }, { label: 'Bank Accounts' }]}
+        title={t('banking.accountsTitle')}
+        description={t('banking.accountsPageDescription')}
+        breadcrumbs={[{ label: t('nav.groups.assetsBanking') }, { label: t('banking.accountsBreadcrumb') }]}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => accountsQuery.refetch()} loading={accountsQuery.isFetching}>
-              <RefreshCw className="h-4 w-4" /> Refresh
+              <RefreshCw className="h-4 w-4" /> {t('common.refresh')}
             </Button>
             <Button size="sm" disabled={!canManage} onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4" /> Add bank account
+              <Plus className="h-4 w-4" /> {t('banking.newAccount')}
             </Button>
           </>
         }
       />
 
       {accountsQuery.error ? (
-        <ErrorState error={accountsQuery.error} onRetry={() => accountsQuery.refetch()} title="Could not load bank accounts" />
+        <ErrorState
+          error={accountsQuery.error}
+          onRetry={() => accountsQuery.refetch()}
+          title={t('banking.couldNotLoad')}
+        />
       ) : (
         <DataTable
           columns={columns}
           data={accountsQuery.data ?? []}
           isLoading={accountsQuery.isLoading}
-          searchPlaceholder="Search bank accounts…"
+          searchPlaceholder={t('banking.searchPlaceholder')}
           getRowId={(row) => row.id}
           hideColumnToggle
         />
@@ -138,11 +148,12 @@ export function BankAccountsPage() {
 }
 
 function CreateBankAccountDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation()
   const accountsQuery = useAccounts()
   const createBankAccount = useCreateBankAccount()
 
   const form = useForm<BankAccountFormValues>({
-    resolver: zodResolver(bankAccountSchema),
+    resolver: zodResolver(bankAccountSchema(t)),
     defaultValues: {
       name: '',
       bankName: '',
@@ -193,10 +204,8 @@ function CreateBankAccountDialog({ open, onOpenChange }: { open: boolean; onOpen
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Add bank account</DialogTitle>
-          <DialogDescription>
-            Bank accounts map to an asset GL account. Transactions recorded here post to that account.
-          </DialogDescription>
+          <DialogTitle>{t('banking.newAccountTitle')}</DialogTitle>
+          <DialogDescription>{t('banking.addAccountDescription')}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -204,27 +213,49 @@ function CreateBankAccountDialog({ open, onOpenChange }: { open: boolean; onOpen
             <FormField
               control={form.control}
               name="name"
-              render={({ field }) => <TextField label="Account name" placeholder="Operating Account" required {...field} />}
+              render={({ field }) => (
+                <TextField
+                  label={t('banking.accountName')}
+                  placeholder={t('banking.accountNamePlaceholder')}
+                  required
+                  {...field}
+                />
+              )}
             />
             <FormField
               control={form.control}
               name="bankName"
               render={({ field }) => (
-                <TextField label="Bank" placeholder="First Republic Bank" {...field} value={field.value ?? ''} />
+                <TextField
+                  label={t('banking.bankName')}
+                  placeholder="First Republic Bank"
+                  {...field}
+                  value={field.value ?? ''}
+                />
               )}
             />
             <FormField
               control={form.control}
               name="accountNumberMasked"
               render={({ field }) => (
-                <TextField label="Account number (masked)" placeholder="•••• 4821" {...field} value={field.value ?? ''} />
+                <TextField
+                  label={t('banking.accountNumberMasked')}
+                  placeholder={t('banking.accountNumberPlaceholder')}
+                  {...field}
+                  value={field.value ?? ''}
+                />
               )}
             />
             <FormField
               control={form.control}
               name="currencyCode"
               render={({ field }) => (
-                <SelectField label="Currency" value={field.value} onChange={field.onChange} options={CURRENCIES} />
+                <SelectField
+                  label={t('common.currency')}
+                  value={field.value}
+                  onChange={field.onChange}
+                  options={CURRENCIES}
+                />
               )}
             />
             <FormField
@@ -232,12 +263,12 @@ function CreateBankAccountDialog({ open, onOpenChange }: { open: boolean; onOpen
               name="glAccountId"
               render={({ field }) => (
                 <ComboboxField
-                  label="GL account"
+                  label={t('banking.glAccount')}
                   required
                   options={glOptions}
                   value={field.value}
                   onChange={(value) => field.onChange(value ?? '')}
-                  placeholder="Select an asset account"
+                  placeholder={t('banking.glAccountHint')}
                   allowClear={false}
                   className="sm:col-span-2"
                 />
@@ -247,23 +278,32 @@ function CreateBankAccountDialog({ open, onOpenChange }: { open: boolean; onOpen
               control={form.control}
               name="openingBalance"
               render={({ field }) => (
-                <TextField label="Opening balance" type="number" step="any" min={0} className="text-right" {...field} />
+                <TextField
+                  label={t('banking.openingBalance')}
+                  type="number"
+                  step="any"
+                  min={0}
+                  className="text-end"
+                  {...field}
+                />
               )}
             />
             <FormField
               control={form.control}
               name="openingBalanceDate"
-              render={({ field }) => <DateField label="Opening balance date" required {...field} />}
+              render={({ field }) => (
+                <DateField label={t('banking.openingBalanceDate')} required {...field} />
+              )}
             />
           </form>
         </Form>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="submit" form="create-bank-account" loading={createBankAccount.isPending}>
-            Create account
+            {t('banking.create')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -272,6 +312,7 @@ function CreateBankAccountDialog({ open, onOpenChange }: { open: boolean; onOpen
 }
 
 export function BankAccountSummaryCards({ bankAccountId }: { bankAccountId: string }) {
+  const { t } = useTranslation()
   const transactionsQuery = useBankTransactions(bankAccountId)
   const accountsQuery = useBankAccounts()
   const account = (accountsQuery.data ?? []).find((candidate) => candidate.id === bankAccountId)
@@ -292,29 +333,37 @@ export function BankAccountSummaryCards({ bankAccountId }: { bankAccountId: stri
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <Card>
         <CardContent className="p-5">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Statement activity</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            {t('banking.statementActivity')}
+          </p>
           <p className="text-2xl font-semibold tabular-nums">{totals.count}</p>
-          <p className="text-xs text-muted-foreground">transactions recorded</p>
+          <p className="text-xs text-muted-foreground">{t('banking.transactionsRecorded')}</p>
         </CardContent>
       </Card>
       <Card>
         <CardContent className="p-5">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Deposits</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('banking.deposits')}</p>
           <p className="text-2xl font-semibold tabular-nums text-success">{formatMoney(totals.deposits)}</p>
         </CardContent>
       </Card>
       <Card>
         <CardContent className="p-5">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Withdrawals &amp; fees</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            {t('banking.withdrawalsFees')}
+          </p>
           <p className="text-2xl font-semibold tabular-nums text-destructive">{formatMoney(totals.withdrawals)}</p>
         </CardContent>
       </Card>
       <Card>
         <CardContent className="p-5">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Uncleared items</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            {t('banking.unclearedItems')}
+          </p>
           <p className="text-2xl font-semibold tabular-nums">{totals.uncleared}</p>
           <p className="text-xs text-muted-foreground">
-            Opening balance {account ? formatMoney(account.openingBalance) : '—'}
+            {t('banking.openingBalanceShort', {
+              amount: account ? formatMoney(account.openingBalance) : t('common.dash'),
+            })}
           </p>
         </CardContent>
       </Card>

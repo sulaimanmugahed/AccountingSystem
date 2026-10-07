@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { useFieldArray, useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
+import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -31,19 +32,22 @@ import { ErrorState, Money, SummaryRow } from '@/components/common/misc'
 import { useBankAccounts, useBills, useVendorPayments, useVendors } from '@/hooks/queries'
 import { useCreateVendorPayment } from '@/hooks/mutations'
 import { useAuth } from '@/lib/auth'
-import { paymentMethodLabels, PaymentMethod } from '@/lib/enums'
+import { PaymentMethod } from '@/lib/enums'
+import { useLabels } from '@/lib/labels'
 import { formatDate, formatMoney, today } from '@/lib/format'
 import { toNumber } from '@/lib/utils'
-import { billStatusLabels } from '@/lib/enums'
 import { billStatusTone, type VendorPayment } from '@/lib/types'
 
-const paymentSchema = z.object({
-  vendorId: z.string().min(1, 'Select a vendor'),
-  paymentDate: z.string().min(1, 'Payment date is required'),
-  amount: z.coerce.number().positive('Amount must be greater than zero'),
+type Translate = (key: string, options?: Record<string, unknown>) => string
+
+const paymentSchema = (t: Translate) =>
+  z.object({
+  vendorId: z.string().min(1, t('vendorPayments.errSelectVendor')),
+  paymentDate: z.string().min(1, t('vendorPayments.errPaymentDateRequired')),
+  amount: z.coerce.number().positive(t('vendorPayments.errAmountPositive')),
   method: z.coerce.number().int().min(1).max(6),
   referenceNumber: z.string().max(60).optional().or(z.literal('')),
-  bankAccountId: z.string().min(1, 'Select the bank account the funds were paid from'),
+  bankAccountId: z.string().min(1, t('vendorPayments.errSelectBank')),
   memo: z.string().max(300).optional().or(z.literal('')),
   applications: z.array(
     z.object({
@@ -53,9 +57,11 @@ const paymentSchema = z.object({
   ),
 })
 
-type PaymentFormValues = z.infer<typeof paymentSchema>
+type PaymentFormValues = z.infer<ReturnType<typeof paymentSchema>>
 
 export function VendorPaymentsPage() {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const { hasRole } = useAuth()
   const canRecord = hasRole('Admin', 'Accountant', 'APClerk')
 
@@ -71,49 +77,49 @@ export function VendorPaymentsPage() {
   )
 
   const vendorName = (vendorId: string) =>
-    (vendorsQuery.data ?? []).find((vendor) => vendor.id === vendorId)?.name ?? '—'
+    (vendorsQuery.data ?? []).find((vendor) => vendor.id === vendorId)?.name ?? t('common.dash')
 
   const columns = useMemo<ColumnDef<VendorPayment>[]>(
     () => [
       {
         accessorKey: 'paymentNumber',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Payment #" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('vendorPayments.paymentNumber')} />,
         cell: ({ row }) => <span className="font-mono text-xs font-medium">{row.original.paymentNumber}</span>,
       },
       {
         accessorKey: 'vendorId',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Vendor" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('vendorPayments.vendor')} />,
         cell: ({ row }) => <span className="font-medium">{vendorName(row.original.vendorId)}</span>,
       },
       {
         accessorKey: 'paymentDate',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Date" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.date')} />,
         cell: ({ row }) => <span className="whitespace-nowrap">{formatDate(row.original.paymentDate)}</span>,
       },
       {
         accessorKey: 'amount',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" align="right" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.amount')} align="right" />,
         cell: ({ row }) => (
-          <div className="text-right font-medium">
+          <div className="text-end font-medium">
             <Money value={row.original.amount} />
           </div>
         ),
       },
       {
         accessorKey: 'unappliedAmount',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Unapplied" align="right" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('vendorPayments.unapplied')} align="right" />,
         cell: ({ row }) => (
-          <div className="text-right">
+          <div className="text-end">
             {row.original.unappliedAmount > 0 ? (
               <Badge variant="warning">{formatMoney(row.original.unappliedAmount)}</Badge>
             ) : (
-              <span className="text-muted-foreground">Fully applied</span>
+              <span className="text-muted-foreground">{t('vendorPayments.fullyApplied')}</span>
             )}
           </div>
         ),
       },
     ],
-    [vendorsQuery.data],
+    [vendorsQuery.data, labels, t],
   )
 
   const total = payments.reduce((sum, payment) => sum + payment.amount, 0)
@@ -121,39 +127,43 @@ export function VendorPaymentsPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Vendor payments"
-        description="Pay supplier bills, apply the payment across one or many bills, and post AP against the bank account."
-        breadcrumbs={[{ label: 'Payables' }, { label: 'Payments' }]}
+        title={t('vendorPayments.title')}
+        description={t('vendorPayments.description')}
+        breadcrumbs={[{ label: t('nav.groups.payables') }, { label: t('vendorPayments.breadcrumb') }]}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => paymentsQuery.refetch()} loading={paymentsQuery.isFetching}>
-              <RefreshCw className="h-4 w-4" /> Refresh
+              <RefreshCw className="h-4 w-4" /> {t('common.refresh')}
             </Button>
             <Button size="sm" disabled={!canRecord} onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4" /> New payment
+              <Plus className="h-4 w-4" /> {t('vendorPayments.newPayment')}
             </Button>
           </>
         }
       />
 
       {paymentsQuery.error ? (
-        <ErrorState error={paymentsQuery.error} onRetry={() => paymentsQuery.refetch()} title="Could not load payments" />
+        <ErrorState
+          error={paymentsQuery.error}
+          onRetry={() => paymentsQuery.refetch()}
+          title={t('vendorPayments.couldNotLoad')}
+        />
       ) : (
         <DataTable
           columns={columns}
           data={payments}
           isLoading={paymentsQuery.isLoading}
-          searchPlaceholder="Search by payment number…"
+          searchPlaceholder={t('vendorPayments.searchPlaceholder')}
           getRowId={(row) => row.id}
           initialSorting={[{ id: 'paymentDate', desc: true }]}
           toolbar={
             <div className="flex items-center gap-2">
               <Select value={vendorFilter} onValueChange={setVendorFilter}>
                 <SelectTrigger className="h-8 w-[200px]">
-                  <SelectValue placeholder="All vendors" />
+                  <SelectValue placeholder={t('vendorPayments.allVendors')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All vendors</SelectItem>
+                  <SelectItem value="all">{t('vendorPayments.allVendors')}</SelectItem>
                   {(vendorsQuery.data ?? []).map((vendor) => (
                     <SelectItem key={vendor.id} value={vendor.id}>
                       {vendor.name}
@@ -173,13 +183,15 @@ export function VendorPaymentsPage() {
 }
 
 function RecordVendorPaymentDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const vendorsQuery = useVendors()
   const billsQuery = useBills()
   const bankAccountsQuery = useBankAccounts()
   const createPayment = useCreateVendorPayment()
 
   const form = useForm<PaymentFormValues>({
-    resolver: zodResolver(paymentSchema),
+    resolver: zodResolver(paymentSchema(t)),
     defaultValues: {
       vendorId: '',
       paymentDate: today(),
@@ -193,7 +205,7 @@ function RecordVendorPaymentDialog({ open, onOpenChange }: { open: boolean; onOp
   })
 
   const { fields, replace } = useFieldArray({ control: form.control, name: 'applications' })
-  const watched = form.watch()
+  const watched = useWatch({ control: form.control })
 
   const openBills = useMemo(
     () =>
@@ -269,8 +281,8 @@ function RecordVendorPaymentDialog({ open, onOpenChange }: { open: boolean; onOp
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Pay vendor bills</DialogTitle>
-          <DialogDescription>AP is debited and the bank account credited. Bills update to partially paid or paid.</DialogDescription>
+          <DialogTitle>{t('vendorPayments.newPaymentTitle2')}</DialogTitle>
+          <DialogDescription>{t('vendorPayments.newPaymentDescription2')}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -281,12 +293,12 @@ function RecordVendorPaymentDialog({ open, onOpenChange }: { open: boolean; onOp
                 name="vendorId"
                 render={({ field }) => (
                   <ComboboxField
-                    label="Vendor"
+                    label={t('vendorPayments.vendor')}
                     required
                     options={vendorOptions}
                     value={field.value}
                     onChange={handleVendorChange}
-                    placeholder="Select vendor"
+                    placeholder={t('vendorPayments.selectVendorPlaceholder')}
                     allowClear={false}
                   />
                 )}
@@ -294,13 +306,21 @@ function RecordVendorPaymentDialog({ open, onOpenChange }: { open: boolean; onOp
               <FormField
                 control={form.control}
                 name="paymentDate"
-                render={({ field }) => <DateField label="Payment date" required {...field} />}
+                render={({ field }) => <DateField label={t('vendorPayments.paymentDate')} required {...field} />}
               />
               <FormField
                 control={form.control}
                 name="amount"
                 render={({ field }) => (
-                  <TextField label="Amount paid" type="number" step="any" min={0} className="text-right" required {...field} />
+                  <TextField
+                    label={t('vendorPayments.amount')}
+                    type="number"
+                    step="any"
+                    min={0}
+                    className="text-end"
+                    required
+                    {...field}
+                  />
                 )}
               />
               <FormField
@@ -308,10 +328,10 @@ function RecordVendorPaymentDialog({ open, onOpenChange }: { open: boolean; onOp
                 name="method"
                 render={({ field }) => (
                   <SelectField
-                    label="Method"
+                    label={t('vendorPayments.method')}
                     value={field.value}
                     onChange={(value) => field.onChange(Number(value))}
-                    options={Object.entries(paymentMethodLabels).map(([value, label]) => ({ value, label }))}
+                    options={Object.entries(labels.paymentMethod).map(([value, label]) => ({ value, label }))}
                   />
                 )}
               />
@@ -319,7 +339,12 @@ function RecordVendorPaymentDialog({ open, onOpenChange }: { open: boolean; onOp
                 control={form.control}
                 name="referenceNumber"
                 render={({ field }) => (
-                  <TextField label="Reference" placeholder="ACH trace / cheque number" {...field} value={field.value ?? ''} />
+                  <TextField
+                    label={t('common.reference')}
+                    placeholder={t('vendorPayments.referencePlaceholder')}
+                    {...field}
+                    value={field.value ?? ''}
+                  />
                 )}
               />
               <FormField
@@ -327,12 +352,12 @@ function RecordVendorPaymentDialog({ open, onOpenChange }: { open: boolean; onOp
                 name="bankAccountId"
                 render={({ field }) => (
                   <SelectField
-                    label="Pay from"
+                    label={t('vendorPayments.depositFrom')}
                     required
                     value={field.value}
                     onChange={field.onChange}
                     options={bankAccountOptions}
-                    placeholder="Select bank account"
+                    placeholder={t('vendorPayments.selectBankAccount')}
                   />
                 )}
               />
@@ -340,7 +365,12 @@ function RecordVendorPaymentDialog({ open, onOpenChange }: { open: boolean; onOp
                 control={form.control}
                 name="memo"
                 render={({ field }) => (
-                  <TextAreaField label="Memo" className="sm:col-span-3" {...field} value={field.value ?? ''} />
+                  <TextAreaField
+                    label={t('common.memo')}
+                    className="sm:col-span-3"
+                    {...field}
+                    value={field.value ?? ''}
+                  />
                 )}
               />
             </div>
@@ -348,14 +378,17 @@ function RecordVendorPaymentDialog({ open, onOpenChange }: { open: boolean; onOp
             <div className="space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-medium">Apply to open bills</p>
+                  <p className="text-sm font-medium">{t('vendorPayments.applyToOpen')}</p>
                   <p className="text-xs text-muted-foreground">
-                    {openBills.length} open bill(s) · applied {formatMoney(applied)} · unapplied{' '}
-                    <span className={remaining < 0 ? 'text-destructive' : ''}>{formatMoney(remaining)}</span>
+                    {t('vendorPayments.openSummary', {
+                      count: openBills.length,
+                      applied: formatMoney(applied),
+                      remaining: formatMoney(remaining),
+                    })}
                   </p>
                 </div>
                 <Button type="button" variant="outline" size="sm" onClick={applyOldestFirst} disabled={!openBills.length}>
-                  <Wand2 className="h-4 w-4" /> Apply oldest first
+                  <Wand2 className="h-4 w-4" /> {t('vendorPayments.applyOldestFirst')}
                 </Button>
               </div>
 
@@ -363,11 +396,11 @@ function RecordVendorPaymentDialog({ open, onOpenChange }: { open: boolean; onOp
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Bill</TableHead>
-                      <TableHead>Due</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Balance</TableHead>
-                      <TableHead className="w-[160px] text-right">Apply</TableHead>
+                      <TableHead>{t('bills.billNumber')}</TableHead>
+                      <TableHead>{t('common.dueDate')}</TableHead>
+                      <TableHead>{t('common.status')}</TableHead>
+                      <TableHead className="text-end">{t('invoices.balance')}</TableHead>
+                      <TableHead className="w-[160px] text-end">{t('vendorPayments.colApply')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -375,8 +408,8 @@ function RecordVendorPaymentDialog({ open, onOpenChange }: { open: boolean; onOp
                       <TableRow>
                         <TableCell colSpan={5} className="h-20 text-center text-sm text-muted-foreground">
                           {watched.vendorId
-                            ? 'No open bills for this vendor — the payment will remain unapplied.'
-                            : 'Select a vendor to list their open bills.'}
+                            ? t('vendorPayments.noOpenBills')
+                            : t('vendorPayments.selectVendorHint')}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -389,10 +422,10 @@ function RecordVendorPaymentDialog({ open, onOpenChange }: { open: boolean; onOp
                             <TableCell>{formatDate(bill.dueDate)}</TableCell>
                             <TableCell>
                               <Badge variant={billStatusTone[bill.status] ?? 'secondary'}>
-                                {billStatusLabels[bill.status]}
+                                {labels.billStatus[bill.status]}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-end">
                               <Money value={bill.balance} />
                             </TableCell>
                             <TableCell>
@@ -405,7 +438,7 @@ function RecordVendorPaymentDialog({ open, onOpenChange }: { open: boolean; onOp
                                     step="any"
                                     min={0}
                                     max={bill.balance}
-                                    className="text-right tabular-nums"
+                                    className="text-end tabular-nums"
                                     value={amountField.value}
                                     onChange={(event) => amountField.onChange(event.target.value)}
                                   />
@@ -422,19 +455,23 @@ function RecordVendorPaymentDialog({ open, onOpenChange }: { open: boolean; onOp
             </div>
 
             <div className="rounded-lg bg-muted/40 p-4">
-              <SummaryRow label="Payment amount" value={formatMoney(toNumber(watched.amount))} />
-              <SummaryRow label="Applied to bills" value={formatMoney(applied)} />
-              <SummaryRow label="Unapplied" value={formatMoney(Math.max(remaining, 0))} strong />
+              <SummaryRow label={t('vendorPayments.paymentAmount')} value={formatMoney(toNumber(watched.amount))} />
+              <SummaryRow label={t('vendorPayments.appliedToBills')} value={formatMoney(applied)} />
+              <SummaryRow
+                label={t('vendorPayments.unappliedCredit')}
+                value={formatMoney(Math.max(remaining, 0))}
+                strong
+              />
             </div>
             {remaining < -0.005 ? (
-              <p className="text-xs font-medium text-destructive">Applications exceed the payment amount.</p>
+              <p className="text-xs font-medium text-destructive">{t('vendorPayments.exceedsWarning')}</p>
             ) : null}
           </form>
         </Form>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             type="submit"
@@ -442,7 +479,7 @@ function RecordVendorPaymentDialog({ open, onOpenChange }: { open: boolean; onOp
             loading={createPayment.isPending}
             disabled={remaining < -0.005 || toNumber(watched.amount) <= 0}
           >
-            <Landmark className="h-4 w-4" /> Record payment
+            <Landmark className="h-4 w-4" /> {t('vendorPayments.save')}
           </Button>
         </DialogFooter>
       </DialogContent>

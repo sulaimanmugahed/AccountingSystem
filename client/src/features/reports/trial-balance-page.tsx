@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Money } from '@/components/common/misc'
@@ -8,6 +9,7 @@ import { formatMoney, today } from '@/lib/format'
 import { ReportPage, ReportTableShell, DateRangeControls } from '@/features/reports/report-shell'
 
 export function TrialBalancePage() {
+  const { t } = useTranslation()
   const [asOfDate, setAsOfDate] = useState(today())
   const report = useTrialBalance(asOfDate)
 
@@ -16,8 +18,8 @@ export function TrialBalancePage() {
 
   return (
     <ReportPage
-      title="Trial balance"
-      description="Net debit or credit movement per account up to the selected date. A balanced trial balance confirms the ledger is internally consistent."
+      title={t('reports.trialBalance.title')}
+      description={t('reports.trialBalance.description')}
       onRefresh={() => report.refetch()}
       isLoading={report.isLoading}
       error={report.error}
@@ -28,20 +30,35 @@ export function TrialBalancePage() {
           rows.map((row) => [row.accountCode, row.accountName, row.accountType, row.debit, row.credit]),
         )
       }
-      controls={<DateRangeControls from="" to={asOfDate} onToChange={setAsOfDate} toLabel="As of date" />}
+      controls={
+        <DateRangeControls
+          from=""
+          to={asOfDate}
+          onToChange={setAsOfDate}
+          toLabel={t('common.asOf')}
+        />
+      }
       actions={
         <Badge variant={balanced ? 'success' : 'destructive'}>
-          {balanced ? 'Balanced' : 'Out of balance'}
+          {balanced ? t('reports.indexStats.balanced') : t('reports.indexStats.outOfBalance')}
         </Badge>
       }
     >
       <ReportTableShell
         footer={
           <div className="flex flex-wrap items-center justify-between gap-4 border-t bg-muted/50 px-4 py-3 text-sm font-medium">
-            <span className="text-muted-foreground">Totals</span>
+            <span className="text-muted-foreground">{t('reports.trialBalance.totals')}</span>
             <div className="flex gap-8 tabular-nums">
-              <span>Debits {formatMoney(report.data?.totalDebit ?? 0)}</span>
-              <span>Credits {formatMoney(report.data?.totalCredit ?? 0)}</span>
+              <span>
+                {t('reports.trialBalance.debits', {
+                  amount: formatMoney(report.data?.totalDebit ?? 0),
+                })}
+              </span>
+              <span>
+                {t('reports.trialBalance.credits', {
+                  amount: formatMoney(report.data?.totalCredit ?? 0),
+                })}
+              </span>
             </div>
           </div>
         }
@@ -49,18 +66,18 @@ export function TrialBalancePage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[110px]">Code</TableHead>
-              <TableHead>Account</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead className="text-right">Debit</TableHead>
-              <TableHead className="text-right">Credit</TableHead>
+              <TableHead className="w-[110px]">{t('reports.trialBalance.code')}</TableHead>
+              <TableHead>{t('reports.trialBalance.account')}</TableHead>
+              <TableHead>{t('reports.trialBalance.type')}</TableHead>
+              <TableHead className="text-end">{t('reports.trialBalance.debit')}</TableHead>
+              <TableHead className="text-end">{t('reports.trialBalance.credit')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
-                  No posted activity up to {asOfDate}.
+                  {t('reports.trialBalance.noActivity', { date: asOfDate })}
                 </TableCell>
               </TableRow>
             ) : (
@@ -71,11 +88,19 @@ export function TrialBalancePage() {
                   <TableCell>
                     <Badge variant="outline">{row.accountType}</Badge>
                   </TableCell>
-                  <TableCell className="text-right">
-                    {row.debit ? <Money value={row.debit} /> : <span className="text-muted-foreground">—</span>}
+                  <TableCell className="text-end">
+                    {row.debit ? (
+                      <Money value={row.debit} />
+                    ) : (
+                      <span className="text-muted-foreground">{t('common.dash')}</span>
+                    )}
                   </TableCell>
-                  <TableCell className="text-right">
-                    {row.credit ? <Money value={row.credit} /> : <span className="text-muted-foreground">—</span>}
+                  <TableCell className="text-end">
+                    {row.credit ? (
+                      <Money value={row.credit} />
+                    ) : (
+                      <span className="text-muted-foreground">{t('common.dash')}</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))
@@ -84,11 +109,11 @@ export function TrialBalancePage() {
           {rows.length ? (
             <TableFooter>
               <TableRow>
-                <TableCell colSpan={3}>Total</TableCell>
-                <TableCell className="text-right">
+                <TableCell colSpan={3}>{t('reports.trialBalance.total')}</TableCell>
+                <TableCell className="text-end">
                   <Money value={report.data?.totalDebit ?? 0} />
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-end">
                   <Money value={report.data?.totalCredit ?? 0} />
                 </TableCell>
               </TableRow>

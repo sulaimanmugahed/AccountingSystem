@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { Download, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,8 +11,8 @@ export function DateRangeControls({
   to,
   onFromChange,
   onToChange,
-  fromLabel = 'From',
-  toLabel = 'As of',
+  fromLabel,
+  toLabel,
   children,
 }: {
   from: string
@@ -22,16 +23,19 @@ export function DateRangeControls({
   toLabel?: string
   children?: React.ReactNode
 }) {
+  const { t } = useTranslation()
+  const fromText = fromLabel ?? t('common.from')
+  const toText = toLabel ?? t('common.asOf')
   return (
     <div className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4">
       {onFromChange ? (
         <div className="space-y-1">
-          <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{fromLabel}</label>
+          <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{fromText}</label>
           <Input type="date" value={from} max={to || undefined} onChange={(event) => onFromChange(event.target.value)} className="w-[170px]" />
         </div>
       ) : null}
       <div className="space-y-1">
-        <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{toLabel}</label>
+        <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{toText}</label>
         <Input type="date" value={to} min={from || undefined} onChange={(event) => onToChange(event.target.value)} className="w-[170px]" />
       </div>
       {children}
@@ -62,23 +66,24 @@ export function ReportPage({
   children: React.ReactNode
   actions?: React.ReactNode
 }) {
+  const { t } = useTranslation()
   return (
     <div className="space-y-5">
       <PageHeader
         title={title}
         description={description}
-        breadcrumbs={breadcrumbs ?? [{ label: 'Reports', href: '/reports' }, { label: title }]}
+        breadcrumbs={breadcrumbs ?? [{ label: t('nav.items.reports'), href: '/reports' }, { label: title }]}
         actions={
           <>
             {actions}
             {onExport ? (
               <Button variant="outline" size="sm" onClick={onExport}>
-                <Download className="h-4 w-4" /> Export CSV
+                <Download className="h-4 w-4" /> {t('common.exportCsv')}
               </Button>
             ) : null}
             {onRefresh ? (
               <Button variant="outline" size="sm" onClick={onRefresh}>
-                <RefreshCw className="h-4 w-4" /> Refresh
+                <RefreshCw className="h-4 w-4" /> {t('common.refresh')}
               </Button>
             ) : null}
           </>
@@ -87,7 +92,13 @@ export function ReportPage({
 
       {controls}
 
-      {error ? <ErrorState error={error} onRetry={onRefresh} title={`Could not load the ${title.toLowerCase()}`} /> : null}
+      {error ? (
+        <ErrorState
+          error={error}
+          onRetry={onRefresh}
+          title={t('reports.couldNotLoad', { name: title })}
+        />
+      ) : null}
       {isLoading && !error ? <TableSkeleton rows={8} /> : null}
       {!isLoading && !error ? children : null}
     </div>

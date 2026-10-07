@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Money, StatCard } from '@/components/common/misc'
@@ -9,14 +10,15 @@ import { DateRangeControls, ReportPage, ReportTableShell } from '@/features/repo
 import type { AgingReport } from '@/lib/types'
 
 export function AgingPage({ kind }: { kind: 'ar' | 'ap' }) {
+  const { t } = useTranslation()
   const [asOfDate, setAsOfDate] = useState(today())
   const arQuery = useArAging(asOfDate)
   const apQuery = useApAging(asOfDate)
   const report = (kind === 'ar' ? arQuery : apQuery) as typeof arQuery & { data?: AgingReport }
 
   const rows = report.data?.rows ?? []
-  const label = kind === 'ar' ? 'Accounts receivable' : 'Accounts payable'
-  const partyLabel = kind === 'ar' ? 'Customer' : 'Vendor'
+  const base = kind === 'ar' ? 'reports.arAging' : 'reports.apAging'
+  const partyLabel = kind === 'ar' ? t('reports.agingCols.customer') : t('reports.agingCols.vendor')
 
   const bucketTotals = rows.reduce(
     (accumulator, row) => ({
@@ -33,15 +35,23 @@ export function AgingPage({ kind }: { kind: 'ar' | 'ap' }) {
 
   return (
     <ReportPage
-      title={`${label} aging`}
-      description={`Open${kind === 'ar' ? ' invoice' : ' bill'} balances bucketed by how far past due they are as of ${formatDate(asOfDate)}.`}
+      title={t(`${base}.title`)}
+      description={t(`${base}.description`, { date: formatDate(asOfDate) })}
       onRefresh={() => report.refetch()}
       isLoading={report.isLoading}
       error={report.error}
       onExport={() =>
         downloadCsv(
           `${kind}-aging-${asOfDate}`,
-          [partyLabel, 'Current', '1-30', '31-60', '61-90', 'Over 90', 'Total due'],
+          [
+            partyLabel,
+            t('reports.agingCols.current'),
+            t('reports.agingCols.days1To30'),
+            t('reports.agingCols.days31To60'),
+            t('reports.agingCols.days61To90'),
+            t('reports.agingCols.over90'),
+            t('reports.agingCols.totalDue'),
+          ],
           rows.map((row) => [
             row.partyName,
             row.buckets.current,
@@ -55,11 +65,27 @@ export function AgingPage({ kind }: { kind: 'ar' | 'ap' }) {
       }
       controls={
         <>
-          <DateRangeControls from="" to={asOfDate} onToChange={setAsOfDate} toLabel="As of date" />
+          <DateRangeControls
+            from=""
+            to={asOfDate}
+            onToChange={setAsOfDate}
+            toLabel={t('common.asOf')}
+          />
           <div className="grid gap-3 sm:grid-cols-3">
-            <StatCard label="Total outstanding" value={formatMoney(report.data?.grandTotal ?? 0)} />
-            <StatCard label="Overdue" value={formatMoney(overdue)} tone={overdue > 0 ? 'negative' : 'default'} />
-            <StatCard label="Current (not yet due)" value={formatMoney(bucketTotals.current)} tone="positive" />
+            <StatCard
+              label={t(`${base}.totalOutstanding`)}
+              value={formatMoney(report.data?.grandTotal ?? 0)}
+            />
+            <StatCard
+              label={t(`${base}.overdue`)}
+              value={formatMoney(overdue)}
+              tone={overdue > 0 ? 'negative' : 'default'}
+            />
+            <StatCard
+              label={t(`${base}.currentNotDue`)}
+              value={formatMoney(bucketTotals.current)}
+              tone="positive"
+            />
           </div>
         </>
       }
@@ -68,15 +94,23 @@ export function AgingPage({ kind }: { kind: 'ar' | 'ap' }) {
           to={`/reports/${kind === 'ar' ? 'ap' : 'ar'}-aging`}
           className="text-sm text-primary hover:underline"
         >
-          Switch to {kind === 'ar' ? 'AP' : 'AR'} aging
+          {t(`${base}.switchTo`)}
         </Link>
       }
     >
       <ReportTableShell
         footer={
           <div className="flex flex-wrap items-center justify-between gap-4 border-t bg-muted/50 px-4 py-3 text-sm font-medium">
-            <span className="text-muted-foreground">{rows.length} {partyLabel.toLowerCase()}(s)</span>
-            <span className="tabular-nums">Grand total {formatMoney(report.data?.grandTotal ?? 0)}</span>
+            <span className="text-muted-foreground">
+              {kind === 'ar'
+                ? t('reports.arAging.customersCount', { count: rows.length })
+                : t('reports.apAging.vendorsCount', { count: rows.length })}
+            </span>
+            <span className="tabular-nums">
+              {t('reports.agingCols.grandTotal', {
+                amount: formatMoney(report.data?.grandTotal ?? 0),
+              })}
+            </span>
           </div>
         }
       >
@@ -84,41 +118,61 @@ export function AgingPage({ kind }: { kind: 'ar' | 'ap' }) {
           <TableHeader>
             <TableRow>
               <TableHead>{partyLabel}</TableHead>
-              <TableHead className="text-right">Current</TableHead>
-              <TableHead className="text-right">1–30 days</TableHead>
-              <TableHead className="text-right">31–60 days</TableHead>
-              <TableHead className="text-right">61–90 days</TableHead>
-              <TableHead className="text-right">Over 90</TableHead>
-              <TableHead className="text-right">Total due</TableHead>
+              <TableHead className="text-end">{t('reports.agingCols.current')}</TableHead>
+              <TableHead className="text-end">{t('reports.agingCols.days1To30')}</TableHead>
+              <TableHead className="text-end">{t('reports.agingCols.days31To60')}</TableHead>
+              <TableHead className="text-end">{t('reports.agingCols.days61To90')}</TableHead>
+              <TableHead className="text-end">{t('reports.agingCols.over90')}</TableHead>
+              <TableHead className="text-end">{t('reports.agingCols.totalDue')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
-                  Nothing outstanding as of {asOfDate}. 🎉
+                  {t('reports.agingCols.nothingOutstanding', { date: asOfDate })}
                 </TableCell>
               </TableRow>
             ) : (
               rows.map((row) => (
                 <TableRow key={row.partyId}>
                   <TableCell className="font-medium">{row.partyName}</TableCell>
-                  <TableCell className="text-right">
-                    {row.buckets.current ? <Money value={row.buckets.current} /> : <span className="text-muted-foreground">—</span>}
+                  <TableCell className="text-end">
+                    {row.buckets.current ? (
+                      <Money value={row.buckets.current} />
+                    ) : (
+                      <span className="text-muted-foreground">{t('common.dash')}</span>
+                    )}
                   </TableCell>
-                  <TableCell className="text-right">
-                    {row.buckets.days1To30 ? <Money value={row.buckets.days1To30} /> : <span className="text-muted-foreground">—</span>}
+                  <TableCell className="text-end">
+                    {row.buckets.days1To30 ? (
+                      <Money value={row.buckets.days1To30} />
+                    ) : (
+                      <span className="text-muted-foreground">{t('common.dash')}</span>
+                    )}
                   </TableCell>
-                  <TableCell className="text-right">
-                    {row.buckets.days31To60 ? <Money value={row.buckets.days31To60} /> : <span className="text-muted-foreground">—</span>}
+                  <TableCell className="text-end">
+                    {row.buckets.days31To60 ? (
+                      <Money value={row.buckets.days31To60} />
+                    ) : (
+                      <span className="text-muted-foreground">{t('common.dash')}</span>
+                    )}
                   </TableCell>
-                  <TableCell className="text-right">
-                    {row.buckets.days61To90 ? <Money value={row.buckets.days61To90} /> : <span className="text-muted-foreground">—</span>}
+                  <TableCell className="text-end">
+                    {row.buckets.days61To90 ? (
+                      <Money value={row.buckets.days61To90} />
+                    ) : (
+                      <span className="text-muted-foreground">{t('common.dash')}</span>
+                    )}
                   </TableCell>
-                  <TableCell className="text-right text-destructive">
-                    {row.buckets.over90 ? <Money value={row.buckets.over90} /> : <span className="text-muted-foreground">—</span>}
+                  <TableCell className="text-end text-destructive">
+                    {row.buckets.over90 ? (
+                      <Money value={row.buckets.over90} />
+                    ) : (
+                      <span className="text-muted-foreground">{t('common.dash')}</span>
+                    )}
                   </TableCell>
-                  <TableCell className="text-right font-semibold">
+                  <TableCell className="text-end font-semibold">
                     <Money value={row.totalDue} />
                   </TableCell>
                 </TableRow>
@@ -128,23 +182,23 @@ export function AgingPage({ kind }: { kind: 'ar' | 'ap' }) {
           {rows.length ? (
             <TableFooter>
               <TableRow>
-                <TableCell>Total</TableCell>
-                <TableCell className="text-right">
+                <TableCell>{t('reports.agingCols.total')}</TableCell>
+                <TableCell className="text-end">
                   <Money value={bucketTotals.current} />
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-end">
                   <Money value={bucketTotals.days1To30} />
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-end">
                   <Money value={bucketTotals.days31To60} />
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-end">
                   <Money value={bucketTotals.days61To90} />
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-end">
                   <Money value={bucketTotals.over90} />
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-end">
                   <Money value={report.data?.grandTotal ?? 0} />
                 </TableCell>
               </TableRow>

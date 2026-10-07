@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -31,35 +32,44 @@ import { Money } from '@/components/common/misc'
 import { useAccounts, useFixedAssets } from '@/hooks/queries'
 import { useCreateFixedAsset, useDisposeAsset, useRunDepreciation } from '@/hooks/mutations'
 import { useAuth } from '@/lib/auth'
-import { assetStatusLabels, depreciationMethodLabels, DepreciationMethod } from '@/lib/enums'
+import { DepreciationMethod } from '@/lib/enums'
+import { useLabels } from '@/lib/labels'
 import { assetStatusTone } from '@/lib/types'
 import { endOfMonth, formatDate, formatMoney, today } from '@/lib/format'
 import { toNumber } from '@/lib/utils'
 import type { FixedAsset, FixedAssetRequest } from '@/lib/types'
 
-const assetSchema = z.object({
-  code: z.string().min(1, 'Asset code is required').max(30),
-  name: z.string().min(2, 'Asset name is required').max(160),
-  acquisitionDate: z.string().min(1, 'Acquisition date is required'),
-  acquisitionCost: z.coerce.number().positive('Cost must be greater than zero'),
-  salvageValue: z.coerce.number().min(0),
-  usefulLifeMonths: z.coerce.number().int().positive('Useful life must be at least one month'),
-  method: z.coerce.number().int().min(1).max(2),
-  assetAccountId: z.string().min(1, 'Select the asset account'),
-  accumulatedDepreciationAccountId: z.string().min(1, 'Select the accumulated depreciation account'),
-  depreciationExpenseAccountId: z.string().min(1, 'Select the depreciation expense account'),
-})
+type Translate = (key: string, options?: Record<string, unknown>) => string
 
-type AssetFormValues = z.infer<typeof assetSchema>
+const assetSchema = (t: Translate) =>
+  z.object({
+    code: z.string().min(1, t('fixedAssets.errCodeRequired')).max(30),
+    name: z.string().min(2, t('fixedAssets.errNameRequired')).max(160),
+    acquisitionDate: z.string().min(1, t('fixedAssets.errDateRequired')),
+    acquisitionCost: z.coerce.number().positive(t('fixedAssets.errCostPositive')),
+    salvageValue: z.coerce.number().min(0),
+    usefulLifeMonths: z.coerce.number().int().positive(t('fixedAssets.errLifePositive')),
+    method: z.coerce.number().int().min(1).max(2),
+    assetAccountId: z.string().min(1, t('fixedAssets.errSelectAssetAccount')),
+    accumulatedDepreciationAccountId: z
+      .string()
+      .min(1, t('fixedAssets.errSelectAccumAccount')),
+    depreciationExpenseAccountId: z.string().min(1, t('fixedAssets.errSelectExpenseAccount')),
+  })
 
-const disposeSchema = z.object({
-  disposalDate: z.string().min(1, 'Disposal date is required'),
-  proceeds: z.coerce.number().min(0),
-})
+type AssetFormValues = z.infer<ReturnType<typeof assetSchema>>
 
-type DisposeFormValues = z.infer<typeof disposeSchema>
+const disposeSchema = (t: Translate) =>
+  z.object({
+    disposalDate: z.string().min(1, t('fixedAssets.errDisposalDateRequired')),
+    proceeds: z.coerce.number().min(0),
+  })
+
+type DisposeFormValues = z.infer<ReturnType<typeof disposeSchema>>
 
 export function FixedAssetsPage() {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const { hasRole } = useAuth()
   const canManage = hasRole('Admin', 'Accountant')
 
@@ -85,60 +95,61 @@ export function FixedAssetsPage() {
     () => [
       {
         accessorKey: 'code',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Code" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.code')} />,
         cell: ({ row }) => <span className="font-mono text-xs font-medium">{row.original.code}</span>,
       },
       {
         accessorKey: 'name',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Asset" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('fixedAssets.asset')} />,
         cell: ({ row }) => (
           <div className="min-w-[200px]">
             <p className="font-medium">{row.original.name}</p>
             <p className="text-xs text-muted-foreground">
-              {depreciationMethodLabels[row.original.method]} · {row.original.usefulLifeMonths} months
+              {labels.depreciationMethod[row.original.method]} ·{' '}
+              {t('fixedAssets.months', { count: row.original.usefulLifeMonths })}
             </p>
           </div>
         ),
       },
       {
         accessorKey: 'acquisitionDate',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Acquired" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('fixedAssets.acquired')} />,
         cell: ({ row }) => <span className="whitespace-nowrap">{formatDate(row.original.acquisitionDate)}</span>,
       },
       {
         accessorKey: 'acquisitionCost',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Cost" align="right" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('fixedAssets.cost')} align="right" />,
         cell: ({ row }) => (
-          <div className="text-right">
+          <div className="text-end">
             <Money value={row.original.acquisitionCost} />
           </div>
         ),
       },
       {
         accessorKey: 'accumulatedDepreciation',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Accum. dep." align="right" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('fixedAssets.accumDep')} align="right" />,
         cell: ({ row }) => (
-          <div className="text-right text-muted-foreground">
+          <div className="text-end text-muted-foreground">
             <Money value={row.original.accumulatedDepreciation} />
           </div>
         ),
       },
       {
         id: 'bookValue',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Book value" align="right" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('fixedAssets.bookValue')} align="right" />,
         accessorFn: (row) => row.acquisitionCost - row.accumulatedDepreciation,
         cell: ({ row }) => (
-          <div className="text-right font-medium">
+          <div className="text-end font-medium">
             <Money value={row.original.acquisitionCost - row.original.accumulatedDepreciation} />
           </div>
         ),
       },
       {
         accessorKey: 'status',
-        header: 'Status',
+        header: t('common.status'),
         cell: ({ row }) => (
           <Badge variant={assetStatusTone[row.original.status] ?? 'secondary'}>
-            {assetStatusLabels[row.original.status] ?? '—'}
+            {labels.assetStatus[row.original.status] ?? t('common.dash')}
           </Badge>
         ),
       },
@@ -163,7 +174,7 @@ export function FixedAssetsPage() {
                   className="text-destructive focus:text-destructive"
                   onClick={() => setAssetToDispose(row.original)}
                 >
-                  <TrendingDown /> Dispose
+                  <TrendingDown /> {t('fixedAssets.dispose')}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -171,45 +182,57 @@ export function FixedAssetsPage() {
         ),
       },
     ],
-    [canManage],
+    [canManage, labels, t],
   )
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Fixed assets"
-        description="Register depreciable assets, run the monthly depreciation posting, and record disposals with automatic gain/loss."
-        breadcrumbs={[{ label: 'Assets & Banking' }, { label: 'Fixed Assets' }]}
+        title={t('fixedAssets.title')}
+        description={t('fixedAssets.description')}
+        breadcrumbs={[{ label: t('nav.groups.assetsBanking') }, { label: t('fixedAssets.breadcrumb') }]}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => assetsQuery.refetch()} loading={assetsQuery.isFetching}>
-              <RefreshCw className="h-4 w-4" /> Refresh
+              <RefreshCw className="h-4 w-4" /> {t('common.refresh')}
             </Button>
             <Button variant="outline" size="sm" disabled={!canManage} onClick={() => setDepreciationOpen(true)}>
-              <Calculator className="h-4 w-4" /> Run depreciation
+              <Calculator className="h-4 w-4" /> {t('fixedAssets.runDepreciation')}
             </Button>
             <Button size="sm" disabled={!canManage} onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4" /> New asset
+              <Plus className="h-4 w-4" /> {t('fixedAssets.newAsset')}
             </Button>
           </>
         }
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Assets" value={assets.length} hint={`${totals.active} active`} icon={Landmark} />
-        <StatCard label="Acquisition cost" value={formatMoney(totals.cost)} />
-        <StatCard label="Accumulated depreciation" value={formatMoney(totals.depreciation)} />
-        <StatCard label="Net book value" value={formatMoney(totals.bookValue)} tone="positive" />
+        <StatCard
+          label={t('fixedAssets.assetsCount')}
+          value={assets.length}
+          hint={t('fixedAssets.activeCount', { count: totals.active })}
+          icon={Landmark}
+        />
+        <StatCard label={t('fixedAssets.acquisitionCostTotal')} value={formatMoney(totals.cost)} />
+        <StatCard
+          label={t('fixedAssets.accumulatedDepreciationTotal')}
+          value={formatMoney(totals.depreciation)}
+        />
+        <StatCard label={t('fixedAssets.netBookValue')} value={formatMoney(totals.bookValue)} tone="positive" />
       </div>
 
       {assetsQuery.error ? (
-        <ErrorState error={assetsQuery.error} onRetry={() => assetsQuery.refetch()} title="Could not load fixed assets" />
+        <ErrorState
+          error={assetsQuery.error}
+          onRetry={() => assetsQuery.refetch()}
+          title={t('fixedAssets.couldNotLoad')}
+        />
       ) : (
         <DataTable
           columns={columns}
           data={assets}
           isLoading={assetsQuery.isLoading}
-          searchPlaceholder="Search assets by code or name…"
+          searchPlaceholder={t('fixedAssets.searchPlaceholder')}
           getRowId={(row) => row.id}
           initialSorting={[{ id: 'code', desc: false }]}
         />
@@ -223,11 +246,13 @@ export function FixedAssetsPage() {
 }
 
 function CreateAssetDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const accountsQuery = useAccounts()
   const createAsset = useCreateFixedAsset()
 
   const form = useForm<AssetFormValues>({
-    resolver: zodResolver(assetSchema),
+    resolver: zodResolver(assetSchema(t)),
     defaultValues: {
       code: '',
       name: '',
@@ -289,10 +314,8 @@ function CreateAssetDialog({ open, onOpenChange }: { open: boolean; onOpenChange
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Register fixed asset</DialogTitle>
-          <DialogDescription>
-            Depreciation posts monthly to the expense account against accumulated depreciation.
-          </DialogDescription>
+          <DialogTitle>{t('fixedAssets.registerTitle')}</DialogTitle>
+          <DialogDescription>{t('fixedAssets.registerDescription')}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -300,18 +323,28 @@ function CreateAssetDialog({ open, onOpenChange }: { open: boolean; onOpenChange
             <FormField
               control={form.control}
               name="code"
-              render={({ field }) => <TextField label="Asset code" placeholder="FA-1005" required {...field} />}
+              render={({ field }) => (
+                <TextField
+                  label={t('fixedAssets.assetCode')}
+                  placeholder={t('fixedAssets.assetCodePlaceholder')}
+                  required
+                  {...field}
+                />
+              )}
             />
             <FormField
               control={form.control}
               name="method"
               render={({ field }) => (
                 <SelectField
-                  label="Method"
+                  label={t('fixedAssets.method')}
                   required
                   value={field.value}
                   onChange={(value) => field.onChange(Number(value))}
-                  options={Object.entries(depreciationMethodLabels).map(([value, label]) => ({ value, label }))}
+                  options={Object.entries(labels.depreciationMethod).map(([value, label]) => ({
+                    value,
+                    label,
+                  }))}
                 />
               )}
             />
@@ -319,31 +352,54 @@ function CreateAssetDialog({ open, onOpenChange }: { open: boolean; onOpenChange
               control={form.control}
               name="name"
               render={({ field }) => (
-                <TextField label="Name" placeholder="Delivery Van" required className="sm:col-span-2" {...field} />
+                <TextField
+                  label={t('common.name')}
+                  placeholder={t('fixedAssets.namePlaceholder')}
+                  required
+                  className="sm:col-span-2"
+                  {...field}
+                />
               )}
             />
             <FormField
               control={form.control}
               name="acquisitionDate"
-              render={({ field }) => <DateField label="Acquisition date" required {...field} />}
+              render={({ field }) => <DateField label={t('fixedAssets.acquisitionDate')} required {...field} />}
             />
             <FormField
               control={form.control}
               name="usefulLifeMonths"
-              render={({ field }) => <TextField label="Useful life (months)" type="number" min={1} {...field} />}
+              render={({ field }) => (
+                <TextField label={t('fixedAssets.usefulLife')} type="number" min={1} {...field} />
+              )}
             />
             <FormField
               control={form.control}
               name="acquisitionCost"
               render={({ field }) => (
-                <TextField label="Acquisition cost" type="number" step="any" min={0} className="text-right" required {...field} />
+                <TextField
+                  label={t('fixedAssets.acquisitionCost')}
+                  type="number"
+                  step="any"
+                  min={0}
+                  className="text-end"
+                  required
+                  {...field}
+                />
               )}
             />
             <FormField
               control={form.control}
               name="salvageValue"
               render={({ field }) => (
-                <TextField label="Salvage value" type="number" step="any" min={0} className="text-right" {...field} />
+                <TextField
+                  label={t('fixedAssets.salvageValue')}
+                  type="number"
+                  step="any"
+                  min={0}
+                  className="text-end"
+                  {...field}
+                />
               )}
             />
             <FormField
@@ -351,7 +407,7 @@ function CreateAssetDialog({ open, onOpenChange }: { open: boolean; onOpenChange
               name="assetAccountId"
               render={({ field }) => (
                 <ComboboxField
-                  label="Asset account"
+                  label={t('fixedAssets.assetAccount')}
                   required
                   options={assetAccounts}
                   value={field.value}
@@ -366,7 +422,7 @@ function CreateAssetDialog({ open, onOpenChange }: { open: boolean; onOpenChange
               name="accumulatedDepreciationAccountId"
               render={({ field }) => (
                 <ComboboxField
-                  label="Accumulated depreciation"
+                  label={t('fixedAssets.accumulatedDepreciation')}
                   required
                   options={assetAccounts}
                   value={field.value}
@@ -381,7 +437,7 @@ function CreateAssetDialog({ open, onOpenChange }: { open: boolean; onOpenChange
               name="depreciationExpenseAccountId"
               render={({ field }) => (
                 <ComboboxField
-                  label="Depreciation expense"
+                  label={t('fixedAssets.depreciationExpense')}
                   required
                   options={expenseAccounts}
                   value={field.value}
@@ -397,10 +453,10 @@ function CreateAssetDialog({ open, onOpenChange }: { open: boolean; onOpenChange
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="submit" form="create-asset" loading={createAsset.isPending}>
-            Register asset
+            {t('fixedAssets.register')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -409,6 +465,7 @@ function CreateAssetDialog({ open, onOpenChange }: { open: boolean; onOpenChange
 }
 
 function RunDepreciationDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation()
   const runDepreciation = useRunDepreciation()
   const [periodEndDate, setPeriodEndDate] = useState(endOfMonth())
 
@@ -416,16 +473,13 @@ function RunDepreciationDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Run monthly depreciation</DialogTitle>
-          <DialogDescription>
-            Posts one depreciation entry per active asset for the chosen period end date. Straight-line assets use
-            (cost − salvage) ÷ life; declining-balance assets use a fixed monthly rate.
-          </DialogDescription>
+          <DialogTitle>{t('fixedAssets.runTitle')}</DialogTitle>
+          <DialogDescription>{t('fixedAssets.runDescription')}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-2">
           <label className="text-sm font-medium" htmlFor="period-end">
-            Period end date
+            {t('fixedAssets.periodEndDate')}
           </label>
           <input
             id="period-end"
@@ -435,19 +489,19 @@ function RunDepreciationDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           <p className="text-xs text-muted-foreground">
-            The date must fall inside an open fiscal period or the API will reject the posting.
+            {t('fixedAssets.periodEndHint')}
           </p>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             loading={runDepreciation.isPending}
             onClick={() => runDepreciation.mutate(periodEndDate, { onSuccess: () => onOpenChange(false) })}
           >
-            <Calculator className="h-4 w-4" /> Post depreciation
+            <Calculator className="h-4 w-4" /> {t('fixedAssets.postDepreciation')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -456,25 +510,24 @@ function RunDepreciationDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 }
 
 function DisposeAssetDialog({ asset, onOpenChange }: { asset: FixedAsset | null; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation()
   const disposeAsset = useDisposeAsset()
 
   const form = useForm<DisposeFormValues>({
-    resolver: zodResolver(disposeSchema),
+    resolver: zodResolver(disposeSchema(t)),
     values: { disposalDate: today(), proceeds: 0 },
   })
 
   const bookValue = asset ? asset.acquisitionCost - asset.accumulatedDepreciation : 0
-  const proceeds = toNumber(form.watch('proceeds'))
+  const proceeds = toNumber(useWatch({ control: form.control, name: 'proceeds' }))
   const gainLoss = proceeds - bookValue
 
   return (
     <Dialog open={!!asset} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Dispose {asset?.name}</DialogTitle>
-          <DialogDescription>
-            Removes the asset at cost, clears accumulated depreciation and books the gain or loss on disposal.
-          </DialogDescription>
+          <DialogTitle>{t('fixedAssets.disposeTitle', { name: asset?.name })}</DialogTitle>
+          <DialogDescription>{t('fixedAssets.disposeDescription')}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -492,13 +545,20 @@ function DisposeAssetDialog({ asset, onOpenChange }: { asset: FixedAsset | null;
             <FormField
               control={form.control}
               name="disposalDate"
-              render={({ field }) => <DateField label="Disposal date" required {...field} />}
+              render={({ field }) => <DateField label={t('fixedAssets.disposalDate')} required {...field} />}
             />
             <FormField
               control={form.control}
               name="proceeds"
               render={({ field }) => (
-                <TextField label="Proceeds" type="number" step="any" min={0} className="text-right" {...field} />
+                <TextField
+                  label={t('fixedAssets.proceeds')}
+                  type="number"
+                  step="any"
+                  min={0}
+                  className="text-end"
+                  {...field}
+                />
               )}
             />
           </form>
@@ -506,25 +566,27 @@ function DisposeAssetDialog({ asset, onOpenChange }: { asset: FixedAsset | null;
 
         <div className="rounded-lg bg-muted/40 p-4 text-sm">
           <div className="flex justify-between py-1">
-            <span className="text-muted-foreground">Book value</span>
+            <span className="text-muted-foreground">{t('fixedAssets.bookValue')}</span>
             <span className="tabular-nums">{formatMoney(bookValue)}</span>
           </div>
           <div className="flex justify-between py-1">
-            <span className="text-muted-foreground">Proceeds</span>
+            <span className="text-muted-foreground">{t('fixedAssets.proceeds')}</span>
             <span className="tabular-nums">{formatMoney(proceeds)}</span>
           </div>
           <div className="flex justify-between border-t pt-2 font-medium">
-            <span>{gainLoss >= 0 ? 'Gain on disposal' : 'Loss on disposal'}</span>
+            <span>
+              {gainLoss >= 0 ? t('fixedAssets.gainOnDisposal') : t('fixedAssets.lossOnDisposal')}
+            </span>
             <span className={gainLoss >= 0 ? 'text-success' : 'text-destructive'}>{formatMoney(Math.abs(gainLoss))}</span>
           </div>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="submit" form="dispose-asset" variant="destructive" loading={disposeAsset.isPending}>
-            Dispose asset
+            {t('fixedAssets.disposeAsset')}
           </Button>
         </DialogFooter>
       </DialogContent>

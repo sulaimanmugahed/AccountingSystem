@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Inbox, Loader2, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -7,11 +8,12 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ApiError } from '@/lib/api/client'
 
-export function PageLoader({ label = 'Loading…' }: { label?: string }) {
+export function PageLoader({ label }: { label?: string }) {
+  const { t } = useTranslation()
   return (
     <div className="flex h-64 flex-col items-center justify-center gap-3 text-muted-foreground">
       <Loader2 className="h-6 w-6 animate-spin" />
-      <p className="text-sm">{label}</p>
+      <p className="text-sm">{label ?? t('common.loadingLabel')}</p>
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -30,30 +31,37 @@ import {
   useStartReconciliation,
 } from '@/hooks/mutations'
 import { useAuth } from '@/lib/auth'
-import { bankTransactionTypeLabels, BankTransactionType } from '@/lib/enums'
+import { BankTransactionType } from '@/lib/enums'
+import { useLabels } from '@/lib/labels'
 import { formatDate, formatMoney, today } from '@/lib/format'
 import { cn, toNumber } from '@/lib/utils'
 import type { BankReconciliation } from '@/lib/types'
 
-const transactionSchema = z.object({
-  transactionDate: z.string().min(1, 'Date is required'),
-  description: z.string().min(2, 'Description is required').max(200),
-  type: z.coerce.number().int().min(1).max(5),
-  amount: z.coerce.number().positive('Amount must be greater than zero'),
-  referenceNumber: z.string().max(60).optional().or(z.literal('')),
-})
+type Translate = (key: string, options?: Record<string, unknown>) => string
 
-type TransactionFormValues = z.infer<typeof transactionSchema>
+const transactionSchema = (t: Translate) =>
+  z.object({
+    transactionDate: z.string().min(1, t('banking.errDateRequired')),
+    description: z.string().min(2, t('banking.errDescriptionRequired')).max(200),
+    type: z.coerce.number().int().min(1).max(5),
+    amount: z.coerce.number().positive(t('banking.errAmountPositive')),
+    referenceNumber: z.string().max(60).optional().or(z.literal('')),
+  })
 
-const reconciliationSchema = z.object({
-  statementDate: z.string().min(1, 'Statement date is required'),
-  statementBeginningBalance: z.coerce.number(),
-  statementEndingBalance: z.coerce.number(),
-})
+type TransactionFormValues = z.infer<ReturnType<typeof transactionSchema>>
 
-type ReconciliationFormValues = z.infer<typeof reconciliationSchema>
+const reconciliationSchema = (t: Translate) =>
+  z.object({
+    statementDate: z.string().min(1, t('banking.errStatementDateRequired')),
+    statementBeginningBalance: z.coerce.number(),
+    statementEndingBalance: z.coerce.number(),
+  })
+
+type ReconciliationFormValues = z.infer<ReturnType<typeof reconciliationSchema>>
 
 export function BankAccountDetailPage() {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const { id = '' } = useParams()
   const { hasRole } = useAuth()
   const canManage = hasRole('Admin', 'Accountant')
@@ -91,7 +99,7 @@ export function BankAccountDetailPage() {
   }, [transactions])
 
   const reconciliationForm = useForm<ReconciliationFormValues>({
-    resolver: zodResolver(reconciliationSchema),
+    resolver: zodResolver(reconciliationSchema(t)),
     defaultValues: {
       statementDate: today(),
       statementBeginningBalance: 0,
@@ -106,13 +114,16 @@ export function BankAccountDetailPage() {
   if (!account && !accountsQuery.isLoading) {
     return (
       <div className="space-y-4">
-        <PageHeader title="Bank account not found" breadcrumbs={[{ label: 'Banking', href: '/banking/accounts' }]} />
+        <PageHeader
+          title={t('banking.notFoundTitle')}
+          breadcrumbs={[{ label: t('nav.groups.assetsBanking'), href: '/banking/accounts' }]}
+        />
         <EmptyState
-          title="This bank account no longer exists"
-          description="It may have been deactivated."
+          title={t('banking.notFoundHeading')}
+          description={t('banking.notFoundHint')}
           action={
             <Button asChild variant="outline">
-              <Link to="/banking/accounts">Back to bank accounts</Link>
+              <Link to="/banking/accounts">{t('banking.backToAccounts')}</Link>
             </Button>
           }
         />
@@ -123,20 +134,29 @@ export function BankAccountDetailPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title={account?.name ?? 'Bank account'}
+        title={account?.name ?? t('banking.detailTitle')}
         description={
           account
-            ? `${account.bankName ?? 'Bank'} ${account.accountNumberMasked ?? ''} · ${account.currencyCode} · opening balance ${formatMoney(account.openingBalance)} on ${formatDate(account.openingBalanceDate)}`
+            ? t('banking.openingBalanceLine', {
+                bank: account.bankName ?? t('banking.bankName'),
+                number: account.accountNumberMasked ?? '',
+                currency: account.currencyCode,
+                amount: formatMoney(account.openingBalance),
+                date: formatDate(account.openingBalanceDate),
+              })
             : undefined
         }
-        breadcrumbs={[{ label: 'Banking', href: '/banking/accounts' }, { label: account?.name ?? 'Account' }]}
+        breadcrumbs={[
+          { label: t('nav.groups.assetsBanking'), href: '/banking/accounts' },
+          { label: account?.name ?? t('banking.accountFallback') },
+        ]}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => transactionsQuery.refetch()} loading={transactionsQuery.isFetching}>
-              <RefreshCw className="h-4 w-4" /> Refresh
+              <RefreshCw className="h-4 w-4" /> {t('common.refresh')}
             </Button>
             <Button size="sm" disabled={!canManage} onClick={() => setTransactionDialogOpen(true)}>
-              <Plus className="h-4 w-4" /> Record transaction
+              <Plus className="h-4 w-4" /> {t('banking.recordTransaction')}
             </Button>
           </>
         }
@@ -144,8 +164,8 @@ export function BankAccountDetailPage() {
 
       <Tabs defaultValue="transactions">
         <TabsList>
-          <TabsTrigger value="transactions">Transactions</TabsTrigger>
-          <TabsTrigger value="reconcile">Reconciliation</TabsTrigger>
+          <TabsTrigger value="transactions">{t('banking.tabTransactions')}</TabsTrigger>
+          <TabsTrigger value="reconcile">{t('banking.tabReconcile')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="transactions">
@@ -157,19 +177,19 @@ export function BankAccountDetailPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Reference</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>{t('common.date')}</TableHead>
+                      <TableHead>{t('common.description')}</TableHead>
+                      <TableHead>{t('common.type')}</TableHead>
+                      <TableHead>{t('common.reference')}</TableHead>
+                      <TableHead className="text-end">{t('common.amount')}</TableHead>
+                      <TableHead>{t('common.status')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {transactions.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">
-                          No bank transactions recorded yet.
+                          {t('banking.noTransactions')}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -180,22 +200,24 @@ export function BankAccountDetailPage() {
                             <TableCell className="whitespace-nowrap">{formatDate(transaction.transactionDate)}</TableCell>
                             <TableCell>{transaction.description}</TableCell>
                             <TableCell>
-                              <Badge variant="secondary">{bankTransactionTypeLabels[transaction.type] ?? '—'}</Badge>
+                              <Badge variant="secondary">
+                                {labels.bankTransactionType[transaction.type] ?? t('common.dash')}
+                              </Badge>
                             </TableCell>
                             <TableCell className="font-mono text-xs text-muted-foreground">
-                              {transaction.referenceNumber ?? '—'}
+                              {transaction.referenceNumber ?? t('common.dash')}
                             </TableCell>
                             <TableCell
-                              className={cn('text-right font-medium', isDeposit ? 'text-success' : 'text-destructive')}
+                              className={cn('text-end font-medium', isDeposit ? 'text-success' : 'text-destructive')}
                             >
                               {isDeposit ? '+' : '−'}
                               <Money value={transaction.amount} />
                             </TableCell>
                             <TableCell>
                               {transaction.isReconciled ? (
-                                <Badge variant="success">Cleared</Badge>
+                                <Badge variant="success">{t('banking.cleared')}</Badge>
                               ) : (
-                                <Badge variant="outline">Uncleared</Badge>
+                                <Badge variant="outline">{t('banking.uncleared')}</Badge>
                               )}
                             </TableCell>
                           </TableRow>
@@ -214,44 +236,45 @@ export function BankAccountDetailPage() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <ScrollText className="h-4 w-4" /> Statement reconciliation
+                  <ScrollText className="h-4 w-4" /> {t('banking.statementReconciliation')}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {reconciliation ? (
                   <>
                     <div className="rounded-lg border bg-muted/40 p-4">
-                      <SummaryRow label="Statement date" value={formatDate(reconciliation.statementDate)} />
                       <SummaryRow
-                        label="Beginning balance"
+                        label={t('banking.statementDate')}
+                        value={formatDate(reconciliation.statementDate)}
+                      />
+                      <SummaryRow
+                        label={t('banking.beginningBalance')}
                         value={formatMoney(reconciliation.statementBeginningBalance)}
                       />
                       <SummaryRow
-                        label="Cleared activity"
+                        label={t('banking.clearedActivity')}
                         value={formatMoney(totals.clearedBalance)}
                       />
                       <SummaryRow
-                        label="Expected ending balance"
+                        label={t('banking.expectedEndingBalance')}
                         value={formatMoney(
                           toNumber(reconciliation.statementBeginningBalance) + totals.clearedBalance,
                         )}
                         strong
                       />
                       <SummaryRow
-                        label="Statement ending balance"
+                        label={t('banking.statementEndingBalance')}
                         value={formatMoney(toNumber(reconciliationForm.watch('statementEndingBalance')))}
                       />
                       <SummaryRow
-                        label="Difference"
+                        label={t('banking.difference')}
                         value={formatMoney(difference)}
                         strong
                         className={Math.abs(difference) < 0.01 ? 'text-success' : 'text-destructive'}
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {Math.abs(difference) < 0.01
-                        ? 'The statement agrees with the cleared ledger balance. You can complete the reconciliation.'
-                        : 'Mark more transactions as cleared below until the difference is zero.'}
+                      {Math.abs(difference) < 0.01 ? t('banking.agrees') : t('banking.markMore')}
                     </p>
                     <Button
                       className="w-full"
@@ -264,7 +287,9 @@ export function BankAccountDetailPage() {
                       }
                     >
                       <CheckCircle2 className="h-4 w-4" />
-                      {reconciliation.isCompleted ? 'Reconciliation completed' : 'Complete reconciliation'}
+                      {reconciliation.isCompleted
+                        ? t('banking.reconciliationCompleted')
+                        : t('banking.completeReconciliation')}
                     </Button>
                     <Button
                       variant="outline"
@@ -274,7 +299,7 @@ export function BankAccountDetailPage() {
                         reconciliationForm.reset()
                       }}
                     >
-                      Start a new reconciliation
+                      {t('banking.newReconciliation')}
                     </Button>
                   </>
                 ) : (
@@ -296,17 +321,19 @@ export function BankAccountDetailPage() {
                       <FormField
                         control={reconciliationForm.control}
                         name="statementDate"
-                        render={({ field }) => <DateField label="Statement date" required {...field} />}
+                        render={({ field }) => (
+                          <DateField label={t('banking.statementDate')} required {...field} />
+                        )}
                       />
                       <FormField
                         control={reconciliationForm.control}
                         name="statementBeginningBalance"
                         render={({ field }) => (
                           <TextField
-                            label="Statement beginning balance"
+                            label={t('banking.statementBeginningBalance')}
                             type="number"
                             step="any"
-                            className="text-right"
+                            className="text-end"
                             {...field}
                           />
                         )}
@@ -316,16 +343,16 @@ export function BankAccountDetailPage() {
                         name="statementEndingBalance"
                         render={({ field }) => (
                           <TextField
-                            label="Statement ending balance"
+                            label={t('banking.statementEndingBalance')}
                             type="number"
                             step="any"
-                            className="text-right"
+                            className="text-end"
                             {...field}
                           />
                         )}
                       />
                       <Button type="submit" className="w-full" loading={startReconciliation.isPending} disabled={!canManage}>
-                        Start reconciliation
+                        {t('banking.startReconciliation')}
                       </Button>
                     </form>
                   </Form>
@@ -336,24 +363,27 @@ export function BankAccountDetailPage() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">
-                  Uncleared items ({totals.unclearedCount}) · net {formatMoney(totals.unclearedBalance)}
+                  {t('banking.unclearedTitle', {
+                    count: totals.unclearedCount,
+                    amount: formatMoney(totals.unclearedBalance),
+                  })}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
+                      <TableHead>{t('common.date')}</TableHead>
+                      <TableHead>{t('common.description')}</TableHead>
+                      <TableHead className="text-end">{t('common.amount')}</TableHead>
+                      <TableHead className="text-end">{t('common.actions')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {transactions.filter((transaction) => !transaction.isReconciled).length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={4} className="h-24 text-center text-sm text-muted-foreground">
-                          Everything on this account is cleared. 🎉
+                          {t('banking.allCleared')}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -363,10 +393,10 @@ export function BankAccountDetailPage() {
                           <TableRow key={transaction.id}>
                             <TableCell className="whitespace-nowrap">{formatDate(transaction.transactionDate)}</TableCell>
                             <TableCell>{transaction.description}</TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-end">
                               <Money value={transaction.amount} />
                             </TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-end">
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -375,7 +405,7 @@ export function BankAccountDetailPage() {
                                   reconstructionClear(reconciliation, transaction.id, clearTransaction.mutate)
                                 }
                               >
-                                Mark cleared
+                                {t('banking.markCleared')}
                               </Button>
                             </TableCell>
                           </TableRow>
@@ -387,7 +417,7 @@ export function BankAccountDetailPage() {
                   <>
                     <Separator />
                     <p className="px-4 py-3 text-xs text-muted-foreground">
-                      Start a reconciliation on the left to begin clearing items.
+                      {t('banking.startHint')}
                     </p>
                   </>
                 ) : null}
@@ -420,10 +450,12 @@ function RecordTransactionDialog({
   onOpenChange: (open: boolean) => void
   bankAccountId: string
 }) {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const addTransaction = useAddBankTransaction()
 
   const form = useForm<TransactionFormValues>({
-    resolver: zodResolver(transactionSchema),
+    resolver: zodResolver(transactionSchema(t)),
     defaultValues: {
       transactionDate: today(),
       description: '',
@@ -463,11 +495,8 @@ function RecordTransactionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Record bank transaction</DialogTitle>
-          <DialogDescription>
-            Deposits and interest increase cash; withdrawals, transfers and fees reduce it. A journal entry is posted
-            automatically.
-          </DialogDescription>
+          <DialogTitle>{t('banking.recordTitle')}</DialogTitle>
+          <DialogDescription>{t('banking.recordDescription')}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -475,18 +504,21 @@ function RecordTransactionDialog({
             <FormField
               control={form.control}
               name="transactionDate"
-              render={({ field }) => <DateField label="Date" required {...field} />}
+              render={({ field }) => <DateField label={t('common.date')} required {...field} />}
             />
             <FormField
               control={form.control}
               name="type"
               render={({ field }) => (
                 <SelectField
-                  label="Type"
+                  label={t('common.type')}
                   required
                   value={field.value}
                   onChange={(value) => field.onChange(Number(value))}
-                  options={Object.entries(bankTransactionTypeLabels).map(([value, label]) => ({ value, label }))}
+                  options={Object.entries(labels.bankTransactionType).map(([value, label]) => ({
+                    value,
+                    label,
+                  }))}
                 />
               )}
             />
@@ -494,21 +526,40 @@ function RecordTransactionDialog({
               control={form.control}
               name="description"
               render={({ field }) => (
-                <TextField label="Description" placeholder="Customer deposit" required className="sm:col-span-2" {...field} />
+                <TextField
+                  label={t('common.description')}
+                  placeholder={t('banking.depositPlaceholder')}
+                  required
+                  className="sm:col-span-2"
+                  {...field}
+                />
               )}
             />
             <FormField
               control={form.control}
               name="amount"
               render={({ field }) => (
-                <TextField label="Amount" type="number" step="any" min={0} className="text-right" required {...field} />
+                <TextField
+                  label={t('common.amount')}
+                  type="number"
+                  step="any"
+                  min={0}
+                  className="text-end"
+                  required
+                  {...field}
+                />
               )}
             />
             <FormField
               control={form.control}
               name="referenceNumber"
               render={({ field }) => (
-                <TextField label="Reference" placeholder="DEP-55231" {...field} value={field.value ?? ''} />
+                <TextField
+                  label={t('common.reference')}
+                  placeholder={t('banking.referencePlaceholder')}
+                  {...field}
+                  value={field.value ?? ''}
+                />
               )}
             />
           </form>
@@ -516,10 +567,10 @@ function RecordTransactionDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="submit" form="record-bank-transaction" loading={addTransaction.isPending}>
-            Record transaction
+            {t('banking.recordTransaction')}
           </Button>
         </DialogFooter>
       </DialogContent>

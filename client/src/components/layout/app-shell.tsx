@@ -1,10 +1,13 @@
 import * as React from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import {
+  Check,
   ChevronsLeft,
   ChevronsRight,
   Command,
+  Languages,
   LogOut,
   Menu,
   Moon,
@@ -28,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { navGroups } from '@/app/nav'
+import { LANGUAGES } from '@/lib/i18n'
 
 function useCompany() {
   return useQuery({
@@ -39,6 +43,7 @@ function useCompany() {
 }
 
 function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; collapsed?: boolean }) {
+  const { t } = useTranslation()
   const { hasRole } = useAuth()
   const { data: company } = useCompany()
 
@@ -50,8 +55,8 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
         </div>
         {!collapsed ? (
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-white">Ledgerly</p>
-            <p className="truncate text-xs text-sidebar-foreground/60">{company?.name ?? 'Accounting System'}</p>
+            <p className="truncate text-sm font-semibold text-white">{t('app.name')}</p>
+            <p className="truncate text-xs text-sidebar-foreground/60">{company?.name ?? t('app.product')}</p>
           </div>
         ) : null}
       </div>
@@ -61,10 +66,10 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
           const items = group.items.filter((item) => hasRole(...(item.roles ?? [])))
           if (!items.length) return null
           return (
-            <div key={group.title} className="space-y-1">
+            <div key={group.titleKey} className="space-y-1">
               {!collapsed ? (
                 <p className="px-2 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
-                  {group.title}
+                  {t(group.titleKey)}
                 </p>
               ) : null}
               {items.map((item) => (
@@ -80,10 +85,10 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
                       collapsed && 'justify-center px-2',
                     )
                   }
-                  title={collapsed ? item.title : undefined}
+                  title={collapsed ? t(item.titleKey) : undefined}
                 >
                   {item.icon ? <item.icon className="h-4 w-4 shrink-0" /> : null}
-                  {!collapsed ? <span className="truncate">{item.title}</span> : null}
+                  {!collapsed ? <span className="truncate">{t(item.titleKey)}</span> : null}
                 </NavLink>
               ))}
             </div>
@@ -93,18 +98,46 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
 
       <div className={cn('border-t border-sidebar-border p-3', collapsed && 'px-2')}>
         <div className={cn('rounded-lg bg-white/5 p-3 text-xs text-sidebar-foreground/70', collapsed && 'hidden')}>
-          <p className="font-medium text-sidebar-foreground">Double-entry enforcement</p>
-          <p className="mt-1 leading-relaxed">
-            Every document posts through a single journal service — entries must balance and fall in an open fiscal
-            period.
-          </p>
+          <p className="font-medium text-sidebar-foreground">{t('shell.doubleEntryTitle')}</p>
+          <p className="mt-1 leading-relaxed">{t('shell.doubleEntryBody')}</p>
         </div>
       </div>
     </div>
   )
 }
 
+function LanguageSwitcher() {
+  const { t, i18n } = useTranslation()
+  const active = (i18n.resolvedLanguage ?? i18n.language ?? 'en').split('-')[0]
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" title={t('language.switchTo')}>
+          <Languages className="h-4.5 w-4.5" />
+          <span className="sr-only">{t('language.switchTo')}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuLabel className="font-normal">{t('language.label')}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {LANGUAGES.map((language) => (
+          <DropdownMenuItem
+            key={language.code}
+            onClick={() => void i18n.changeLanguage(language.code)}
+            className="justify-between"
+          >
+            <span>{language.label}</span>
+            {active === language.code ? <Check className="h-4 w-4" /> : null}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 export function AppShell() {
+  const { t } = useTranslation()
   const { session, logout } = useAuth()
   const { resolvedTheme, toggleTheme } = useTheme()
   const navigate = useNavigate()
@@ -131,7 +164,7 @@ export function AppShell() {
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-30 hidden shrink-0 border-r border-sidebar-border bg-sidebar transition-[width] duration-200 lg:block',
+          'fixed inset-y-0 start-0 z-30 hidden shrink-0 border-e border-sidebar-border bg-sidebar transition-[width] duration-200 lg:block',
           collapsed ? 'w-[68px]' : 'w-64',
         )}
       >
@@ -142,11 +175,11 @@ export function AppShell() {
       {mobileOpen ? (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 w-72 bg-sidebar shadow-xl">
+          <aside className="absolute inset-y-0 start-0 w-72 bg-sidebar shadow-xl">
             <button
               type="button"
               onClick={() => setMobileOpen(false)}
-              className="absolute right-3 top-4 rounded-md p-1 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-white"
+              className="absolute end-3 top-4 rounded-md p-1 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-white"
             >
               <X className="h-4 w-4" />
             </button>
@@ -155,11 +188,16 @@ export function AppShell() {
         </div>
       ) : null}
 
-      <div className={cn('flex min-w-0 flex-1 flex-col transition-[padding] duration-200', collapsed ? 'lg:pl-[68px]' : 'lg:pl-64')}>
+      <div
+        className={cn(
+          'flex min-w-0 flex-1 flex-col transition-[padding] duration-200',
+          collapsed ? 'lg:ps-[68px]' : 'lg:ps-64',
+        )}
+      >
         <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-6">
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileOpen(true)}>
             <Menu className="h-5 w-5" />
-            <span className="sr-only">Open navigation</span>
+            <span className="sr-only">{t('shell.openNavigation')}</span>
           </Button>
           <Button
             variant="ghost"
@@ -168,22 +206,24 @@ export function AppShell() {
             onClick={() => setCollapsed((value) => !value)}
           >
             {collapsed ? <ChevronsRight className="h-5 w-5" /> : <ChevronsLeft className="h-5 w-5" />}
-            <span className="sr-only">Toggle sidebar</span>
+            <span className="sr-only">{t('shell.toggleSidebar')}</span>
           </Button>
 
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{company?.name ?? 'Accounting System'}</p>
+            <p className="truncate text-sm font-medium">{company?.name ?? t('app.product')}</p>
             <p className="truncate text-xs text-muted-foreground">
-              Base currency {company?.baseCurrencyCode ?? 'USD'}
+              {t('app.baseCurrency', { code: company?.baseCurrencyCode ?? 'USD' })}
               {company?.fiscalYearStartMonth
-                ? ` · fiscal year starts month ${company.fiscalYearStartMonth}`
+                ? ` · ${t('app.fiscalYearStart', { month: company.fiscalYearStartMonth })}`
                 : ''}
             </p>
           </div>
 
-          <Button variant="ghost" size="icon" onClick={toggleTheme} title="Toggle theme">
+          <LanguageSwitcher />
+
+          <Button variant="ghost" size="icon" onClick={toggleTheme} title={t('shell.toggleTheme')}>
             {resolvedTheme === 'dark' ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
-            <span className="sr-only">Toggle theme</span>
+            <span className="sr-only">{t('shell.toggleTheme')}</span>
           </Button>
 
           <DropdownMenu>
@@ -192,7 +232,7 @@ export function AppShell() {
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
                   {initials(session?.fullName ?? session?.email)}
                 </span>
-                <span className="hidden text-left sm:block">
+                <span className="hidden text-start sm:block">
                   <span className="block max-w-[160px] truncate text-sm font-medium">{session?.fullName}</span>
                   <span className="block text-xs text-muted-foreground">{session?.roles.join(', ')}</span>
                 </span>
@@ -208,12 +248,12 @@ export function AppShell() {
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
                 <Link to="/settings/company">
-                  <UserCircle2 /> Company profile
+                  <UserCircle2 /> {t('shell.companyProfile')}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
-                <LogOut /> Sign out
+                <LogOut /> {t('shell.signOut')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -223,9 +263,7 @@ export function AppShell() {
           <Outlet />
         </main>
 
-        <footer className="border-t px-6 py-4 text-xs text-muted-foreground">
-          Ledgerly · React client for the AccountingSystem .NET API · TanStack Query + TanStack Table + React Hook Form
-        </footer>
+        <footer className="border-t px-6 py-4 text-xs text-muted-foreground">{t('app.footer')}</footer>
       </div>
     </div>
   )

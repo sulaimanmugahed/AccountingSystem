@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -32,14 +33,18 @@ import { EmptyState, ErrorState, Money } from '@/components/common/misc'
 import { useAccounts, useItems, useStockTransactions, useTaxCodes } from '@/hooks/queries'
 import { useCreateItem, useDeactivateItem } from '@/hooks/mutations'
 import { useAuth } from '@/lib/auth'
-import { InventoryValuationMethod, itemTypeLabels, ItemType, stockTransactionTypeLabels } from '@/lib/enums'
-import { formatDate, formatNumber, today } from '@/lib/format'
+import { ItemType } from '@/lib/enums'
+import { useLabels } from '@/lib/labels'
+import { formatDate, formatMoney, formatNumber, today } from '@/lib/format'
 import { cn, toNumber } from '@/lib/utils'
 import type { Item, ItemRequest } from '@/lib/types'
 
-const itemSchema = z.object({
-  sku: z.string().min(1, 'SKU is required').max(40),
-  name: z.string().min(2, 'Item name is required').max(160),
+type Translate = (key: string, options?: Record<string, unknown>) => string
+
+const itemSchema = (t: Translate) =>
+  z.object({
+  sku: z.string().min(1, t('items.errSkuRequired')).max(40),
+  name: z.string().min(2, t('items.errNameRequired')).max(160),
   description: z.string().max(400).optional().or(z.literal('')),
   type: z.coerce.number().int().min(1).max(3),
   salesPrice: z.coerce.number().min(0),
@@ -51,9 +56,11 @@ const itemSchema = z.object({
   reorderPoint: z.coerce.number().min(0),
 })
 
-type ItemFormValues = z.infer<typeof itemSchema>
+type ItemFormValues = z.infer<ReturnType<typeof itemSchema>>
 
 export function ItemsPage() {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const { hasRole } = useAuth()
   const canManage = hasRole('Admin', 'Accountant')
 
@@ -73,48 +80,50 @@ export function ItemsPage() {
     () => [
       {
         accessorKey: 'sku',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="SKU" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('items.sku')} />,
         cell: ({ row }) => <span className="font-mono text-xs font-medium">{row.original.sku}</span>,
       },
       {
         accessorKey: 'name',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Item" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('items.item')} />,
         cell: ({ row }) => (
           <div className="min-w-[200px]">
             <p className="font-medium">{row.original.name}</p>
             <p className="text-xs text-muted-foreground">
-              {itemTypeLabels[row.original.type]} · {InventoryValuationMethod[row.original.valuationMethod] ?? 'Weighted Average'}
+              {labels.itemType[row.original.type]} ·{' '}
+              {labels.valuationMethod[row.original.valuationMethod] ?? t('enums.valuationMethod.weightedAverage')}
             </p>
           </div>
         ),
       },
       {
         accessorKey: 'salesPrice',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Sales price" align="right" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('items.salesPrice')} align="right" />,
         cell: ({ row }) => (
-          <div className="text-right">
+          <div className="text-end">
             <Money value={row.original.salesPrice} />
           </div>
         ),
       },
       {
         accessorKey: 'purchaseCost',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Cost" align="right" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('items.cost')} align="right" />,
         cell: ({ row }) => (
-          <div className="text-right text-muted-foreground">
+          <div className="text-end text-muted-foreground">
             <Money value={row.original.purchaseCost} />
           </div>
         ),
       },
       {
         id: 'quantityOnHand',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="On hand" align="right" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('items.onHand')} align="right" />,
         accessorFn: (row) => row.quantityOnHand,
         cell: ({ row }) => {
-          if (row.original.type !== ItemType.Inventory) return <div className="text-right text-muted-foreground">—</div>
+          if (row.original.type !== ItemType.Inventory)
+            return <div className="text-end text-muted-foreground">{t('common.dash')}</div>
           const low = row.original.quantityOnHand <= row.original.reorderPoint
           return (
-            <div className={cn('text-right font-medium tabular-nums', low && 'text-warning')}>
+            <div className={cn('text-end font-medium tabular-nums', low && 'text-warning')}>
               {formatNumber(row.original.quantityOnHand, 2)}
             </div>
           )
@@ -122,23 +131,30 @@ export function ItemsPage() {
       },
       {
         id: 'value',
-        header: 'Inventory value',
+        header: t('items.inventoryValue'),
         enableSorting: false,
         cell: ({ row }) => {
-          if (row.original.type !== ItemType.Inventory) return <div className="text-right text-muted-foreground">—</div>
+          if (row.original.type !== ItemType.Inventory)
+            return <div className="text-end text-muted-foreground">{t('common.dash')}</div>
           return (
-            <div className="text-right">
+            <div className="text-end">
               <Money value={row.original.quantityOnHand * row.original.averageCost} />
-              <p className="text-xs text-muted-foreground">avg {formatNumber(row.original.averageCost, 2)}</p>
+              <p className="text-xs text-muted-foreground">
+                {t('items.averageShort', { cost: formatNumber(row.original.averageCost, 2) })}
+              </p>
             </div>
           )
         },
       },
       {
         accessorKey: 'isActive',
-        header: 'Status',
+        header: t('common.status'),
         cell: ({ row }) =>
-          row.original.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="outline">Inactive</Badge>,
+          row.original.isActive ? (
+            <Badge variant="success">{t('common.active')}</Badge>
+          ) : (
+            <Badge variant="outline">{t('common.inactive')}</Badge>
+          ),
       },
       {
         id: 'actions',
@@ -157,14 +173,14 @@ export function ItemsPage() {
                 <DropdownMenuLabel>{row.original.name}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setHistoryItem(row.original)}>
-                  <History /> Stock history
+                  <History /> {t('items.stockHistory')}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={!canManage || !row.original.isActive}
                   className="text-destructive focus:text-destructive"
                   onClick={() => setItemToDeactivate(row.original)}
                 >
-                  <Power /> Deactivate
+                  <Power /> {t('items.deactivate')}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -172,22 +188,22 @@ export function ItemsPage() {
         ),
       },
     ],
-    [canManage],
+    [canManage, labels, t],
   )
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Items & inventory"
-        description={`Inventory, service and non-inventory items. Weighted-average costing drives COGS on sale and stock receipts on purchase. Inventory value on hand: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(inventoryValue)}.`}
-        breadcrumbs={[{ label: 'Assets & Banking' }, { label: 'Items & Inventory' }]}
+        title={t('items.title')}
+        description={t('items.description', { value: formatMoney(inventoryValue) })}
+        breadcrumbs={[{ label: t('nav.groups.assetsBanking') }, { label: t('items.breadcrumb') }]}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => itemsQuery.refetch()} loading={itemsQuery.isFetching}>
-              <RefreshCw className="h-4 w-4" /> Refresh
+              <RefreshCw className="h-4 w-4" /> {t('common.refresh')}
             </Button>
             <Button size="sm" disabled={!canManage} onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4" /> New item
+              <Plus className="h-4 w-4" /> {t('items.newItem')}
             </Button>
           </>
         }
@@ -195,20 +211,29 @@ export function ItemsPage() {
 
       {lowStock.length ? (
         <div className="rounded-lg border border-warning/40 bg-warning/5 px-4 py-3 text-sm">
-          <span className="font-medium">Low stock:</span>{' '}
-          {lowStock.slice(0, 5).map((item) => `${item.name} (${formatNumber(item.quantityOnHand, 0)} left)`).join(', ')}
-          {lowStock.length > 5 ? ` and ${lowStock.length - 5} more` : ''}
+          <span className="font-medium">{t('items.lowStock')}</span>{' '}
+          {lowStock
+            .slice(0, 5)
+            .map((item) =>
+              t('items.lowStockItem', { name: item.name, qty: formatNumber(item.quantityOnHand, 0) }),
+            )
+            .join(', ')}
+          {lowStock.length > 5 ? ` ${t('items.lowStockMore', { count: lowStock.length - 5 })}` : ''}
         </div>
       ) : null}
 
       {itemsQuery.error ? (
-        <ErrorState error={itemsQuery.error} onRetry={() => itemsQuery.refetch()} title="Could not load items" />
+        <ErrorState
+          error={itemsQuery.error}
+          onRetry={() => itemsQuery.refetch()}
+          title={t('items.couldNotLoad')}
+        />
       ) : (
         <DataTable
           columns={columns}
           data={items}
           isLoading={itemsQuery.isLoading}
-          searchPlaceholder="Search by SKU or item name…"
+          searchPlaceholder={t('items.searchPlaceholder')}
           getRowId={(row) => row.id}
           initialSorting={[{ id: 'name', desc: false }]}
           toolbar={
@@ -217,7 +242,7 @@ export function ItemsPage() {
               size="sm"
               onClick={() => setIncludeInactive((value) => !value)}
             >
-              {includeInactive ? 'Showing inactive' : 'Active only'}
+              {includeInactive ? t('common.showInactive') : t('common.activeOnly')}
             </Button>
           }
         />
@@ -229,9 +254,13 @@ export function ItemsPage() {
       <ConfirmDialog
         open={!!itemToDeactivate}
         onOpenChange={(open) => !open && setItemToDeactivate(null)}
-        title="Deactivate item?"
-        description={itemToDeactivate ? `${itemToDeactivate.name} will no longer be selectable on new invoices or bills.` : undefined}
-        confirmLabel="Deactivate"
+        title={t('items.deactivateTitle')}
+        description={
+          itemToDeactivate
+            ? t('items.deactivateDescription', { name: itemToDeactivate.name })
+            : undefined
+        }
+        confirmLabel={t('items.deactivate')}
         destructive
         loading={deactivateItem.isPending}
         onConfirm={() => {
@@ -244,6 +273,8 @@ export function ItemsPage() {
 }
 
 function StockHistoryDialog({ item, onOpenChange }: { item: Item | null; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const historyQuery = useStockTransactions(item?.id)
   const rows = historyQuery.data ?? []
 
@@ -255,39 +286,43 @@ function StockHistoryDialog({ item, onOpenChange }: { item: Item | null; onOpenC
             <Boxes className="h-4 w-4" /> {item?.name}
           </DialogTitle>
           <DialogDescription>
-            Weighted-average stock ledger. Quantity on hand {formatNumber(item?.quantityOnHand ?? 0, 2)} · average cost{' '}
-            {formatNumber(item?.averageCost ?? 0, 2)}.
+            {t('items.stockLedgerDescription', {
+              qty: formatNumber(item?.quantityOnHand ?? 0, 2),
+              cost: formatNumber(item?.averageCost ?? 0, 2),
+            })}
           </DialogDescription>
         </DialogHeader>
 
         {rows.length === 0 ? (
-          <EmptyState title="No stock movements" description="Movements appear when invoices and bills post." />
+          <EmptyState title={t('items.noMovements')} description={t('items.noMovementsHint')} />
         ) : (
           <div className="rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead className="text-right">Qty</TableHead>
-                  <TableHead className="text-right">Unit cost</TableHead>
-                  <TableHead className="text-right">Running qty</TableHead>
-                  <TableHead className="text-right">Running value</TableHead>
+                  <TableHead>{t('common.date')}</TableHead>
+                  <TableHead>{t('common.type')}</TableHead>
+                  <TableHead className="text-end">{t('invoices.qty')}</TableHead>
+                  <TableHead className="text-end">{t('items.unitCost')}</TableHead>
+                  <TableHead className="text-end">{t('items.runningQty')}</TableHead>
+                  <TableHead className="text-end">{t('items.runningValue')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell className="whitespace-nowrap">{formatDate(row.transactionDate)}</TableCell>
-                    <TableCell>{stockTransactionTypeLabels[row.type] ?? '—'}</TableCell>
-                    <TableCell className={cn('text-right tabular-nums', row.quantity < 0 && 'text-destructive')}>
+                    <TableCell>
+                      {labels.stockTransactionType[row.type] ?? t('common.dash')}
+                    </TableCell>
+                    <TableCell className={cn('text-end tabular-nums', row.quantity < 0 && 'text-destructive')}>
                       {formatNumber(row.quantity, 2)}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-end">
                       <Money value={row.unitCost} />
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{formatNumber(row.runningQuantity, 2)}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-end tabular-nums">{formatNumber(row.runningQuantity, 2)}</TableCell>
+                    <TableCell className="text-end">
                       <Money value={row.runningValue} />
                     </TableCell>
                   </TableRow>
@@ -302,12 +337,14 @@ function StockHistoryDialog({ item, onOpenChange }: { item: Item | null; onOpenC
 }
 
 function CreateItemDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const accountsQuery = useAccounts()
   const taxCodesQuery = useTaxCodes()
   const createItem = useCreateItem()
 
   const form = useForm<ItemFormValues>({
-    resolver: zodResolver(itemSchema),
+    resolver: zodResolver(itemSchema(t)),
     defaultValues: {
       sku: '',
       name: '',
@@ -323,7 +360,7 @@ function CreateItemDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
     },
   })
 
-  const itemType = form.watch('type')
+  const itemType = useWatch({ control: form.control, name: 'type' })
 
   const revenueAccounts = useMemo(
     () =>
@@ -384,8 +421,8 @@ function CreateItemDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>New item</DialogTitle>
-          <DialogDescription>Inventory items are valued at weighted-average cost and post COGS through the ledger.</DialogDescription>
+          <DialogTitle>{t('items.newItemTitle')}</DialogTitle>
+          <DialogDescription>{t('items.newItemDescription')}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -393,18 +430,20 @@ function CreateItemDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
             <FormField
               control={form.control}
               name="sku"
-              render={({ field }) => <TextField label="SKU" placeholder="SKU-104" required {...field} />}
+              render={({ field }) => (
+                <TextField label={t('items.sku')} placeholder={t('items.skuPlaceholder')} required {...field} />
+              )}
             />
             <FormField
               control={form.control}
               name="type"
               render={({ field }) => (
                 <SelectField
-                  label="Type"
+                  label={t('common.type')}
                   required
                   value={field.value}
                   onChange={(value) => field.onChange(Number(value))}
-                  options={Object.entries(itemTypeLabels).map(([value, label]) => ({ value, label }))}
+                  options={Object.entries(labels.itemType).map(([value, label]) => ({ value, label }))}
                 />
               )}
             />
@@ -412,28 +451,53 @@ function CreateItemDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
               control={form.control}
               name="name"
               render={({ field }) => (
-                <TextField label="Name" placeholder="Wireless Keyboard" required className="sm:col-span-2" {...field} />
+                <TextField
+                  label={t('common.name')}
+                  placeholder={t('items.namePlaceholder')}
+                  required
+                  className="sm:col-span-2"
+                  {...field}
+                />
               )}
             />
             <FormField
               control={form.control}
               name="description"
               render={({ field }) => (
-                <TextAreaField label="Description" className="sm:col-span-2" {...field} value={field.value ?? ''} />
+                <TextAreaField
+                  label={t('common.description')}
+                  className="sm:col-span-2"
+                  {...field}
+                  value={field.value ?? ''}
+                />
               )}
             />
             <FormField
               control={form.control}
               name="salesPrice"
               render={({ field }) => (
-                <TextField label="Sales price" type="number" step="any" min={0} className="text-right" {...field} />
+                <TextField
+                  label={t('items.salesPrice')}
+                  type="number"
+                  step="any"
+                  min={0}
+                  className="text-end"
+                  {...field}
+                />
               )}
             />
             <FormField
               control={form.control}
               name="purchaseCost"
               render={({ field }) => (
-                <TextField label="Purchase cost" type="number" step="any" min={0} className="text-right" {...field} />
+                <TextField
+                  label={t('items.purchaseCost')}
+                  type="number"
+                  step="any"
+                  min={0}
+                  className="text-end"
+                  {...field}
+                />
               )}
             />
             <FormField
@@ -441,11 +505,11 @@ function CreateItemDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
               name="incomeAccountId"
               render={({ field }) => (
                 <ComboboxField
-                  label="Income account"
+                  label={t('items.incomeAccount')}
                   options={revenueAccounts}
                   value={field.value ?? null}
                   onChange={field.onChange}
-                  placeholder="Company default"
+                  placeholder={t('items.companyDefault')}
                 />
               )}
             />
@@ -454,11 +518,11 @@ function CreateItemDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
               name="expenseAccountId"
               render={({ field }) => (
                 <ComboboxField
-                  label="Expense / COGS account"
+                  label={t('items.expenseAccount')}
                   options={expenseAccounts}
                   value={field.value ?? null}
                   onChange={field.onChange}
-                  placeholder="Company default"
+                  placeholder={t('items.companyDefault')}
                 />
               )}
             />
@@ -468,7 +532,7 @@ function CreateItemDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                 name="inventoryAssetAccountId"
                 render={({ field }) => (
                   <ComboboxField
-                    label="Inventory asset account"
+                    label={t('items.inventoryAssetAccount')}
                     options={assetAccounts}
                     value={field.value ?? null}
                     onChange={field.onChange}
@@ -482,11 +546,11 @@ function CreateItemDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
               name="defaultTaxCodeId"
               render={({ field }) => (
                 <ComboboxField
-                  label="Default tax code"
+                  label={t('items.defaultTaxCode')}
                   options={taxOptions}
                   value={field.value ?? null}
                   onChange={field.onChange}
-                  placeholder="No tax"
+                  placeholder={t('bills.noTax')}
                 />
               )}
             />
@@ -494,21 +558,28 @@ function CreateItemDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
               control={form.control}
               name="reorderPoint"
               render={({ field }) => (
-                <TextField label="Reorder point" type="number" step="any" min={0} className="text-right" {...field} />
+                <TextField
+                  label={t('items.reorderPoint')}
+                  type="number"
+                  step="any"
+                  min={0}
+                  className="text-end"
+                  {...field}
+                />
               )}
             />
             <p className="text-xs text-muted-foreground sm:col-span-2">
-              Opening stock is recorded through a bill or an inventory adjustment — today is {formatDate(today())}.
+              {t('items.openingStockNote', { date: formatDate(today()) })}
             </p>
           </form>
         </Form>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="submit" form="create-item" loading={createItem.isPending}>
-            Create item
+            {t('items.create')}
           </Button>
         </DialogFooter>
       </DialogContent>

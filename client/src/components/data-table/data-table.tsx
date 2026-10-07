@@ -14,6 +14,7 @@ import {
   type VisibilityState,
 } from '@tanstack/react-table'
 import { ArrowDown, ArrowUp, ChevronDown, ChevronsUpDown, Search, Settings2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -69,11 +70,11 @@ export function DataTable<TData, TValue>({
   data,
   isLoading = false,
   toolbar,
-  searchPlaceholder = 'Search…',
+  searchPlaceholder,
   hideSearch = false,
   hideColumnToggle = false,
   pageSize = 15,
-  emptyMessage = 'No records found.',
+  emptyMessage,
   emptyState,
   onRowClick,
   initialSorting = [],
@@ -82,6 +83,7 @@ export function DataTable<TData, TValue>({
   footerRow,
   maxHeight,
 }: DataTableProps<TData, TValue>) {
+  const { t } = useTranslation()
   const [sorting, setSorting] = React.useState<SortingState>(initialSorting)
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
@@ -118,8 +120,8 @@ export function DataTable<TData, TValue>({
               <Input
                 value={globalFilter}
                 onChange={(event) => setGlobalFilter(event.target.value)}
-                placeholder={searchPlaceholder}
-                className="pl-8"
+                placeholder={searchPlaceholder ?? t('fields.searchPlaceholder')}
+                className="ps-8"
               />
             </div>
           ) : null}
@@ -130,12 +132,12 @@ export function DataTable<TData, TValue>({
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm">
                     <Settings2 className="h-4 w-4" />
-                    Columns
+                    {t('common.columns')}
                     <ChevronDown className="h-3.5 w-3.5 opacity-60" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+                  <DropdownMenuLabel>{t('table.toggleColumns')}</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {table
                     .getAllColumns()
@@ -199,7 +201,9 @@ export function DataTable<TData, TValue>({
             ) : (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={columnCount || 1} className="h-40 text-center">
-                  {emptyState ?? <span className="text-sm text-muted-foreground">{emptyMessage}</span>}
+                  {emptyState ?? (
+                    <span className="text-sm text-muted-foreground">{emptyMessage ?? t('table.noRecords')}</span>
+                  )}
                 </TableCell>
               </TableRow>
             )}
@@ -210,17 +214,20 @@ export function DataTable<TData, TValue>({
 
       <div className="flex flex-col-reverse items-center justify-between gap-2 sm:flex-row">
         <div className="text-xs text-muted-foreground">
-          {table.getFilteredRowModel().rows.length} record(s)
+          {t('common.records', { count: table.getFilteredRowModel().rows.length })}
           {table.getFilteredRowModel().rows.length > 0 ? (
             <>
-              {' · page '}
-              {table.getState().pagination.pageIndex + 1} of {Math.max(table.getPageCount(), 1)}
+              {' · '}
+              {t('table.pageOf', {
+                page: table.getState().pagination.pageIndex + 1,
+                total: Math.max(table.getPageCount(), 1),
+              })}
             </>
           ) : null}
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Rows</span>
+            <span className="text-xs text-muted-foreground">{t('table.rows')}</span>
             <Select
               value={String(table.getState().pagination.pageSize)}
               onValueChange={(value) => table.setPageSize(Number(value))}
@@ -244,7 +251,7 @@ export function DataTable<TData, TValue>({
               onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
             >
-              Previous
+              {t('common.previous')}
             </Button>
             <Button
               variant="outline"
@@ -252,7 +259,7 @@ export function DataTable<TData, TValue>({
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
             >
-              Next
+              {t('common.next')}
             </Button>
           </div>
         </div>
@@ -273,8 +280,9 @@ export function DataTableColumnHeader<TData, TValue>({
   className?: string
   align?: 'left' | 'right' | 'center'
 }) {
+  const { t } = useTranslation()
   if (!column.getCanSort()) {
-    return <span className={cn(align === 'right' && 'block text-right', className)}>{title}</span>
+    return <span className={cn(align === 'right' && 'block text-end', className)}>{title}</span>
   }
 
   return (
@@ -284,7 +292,7 @@ export function DataTableColumnHeader<TData, TValue>({
           type="button"
           className={cn(
             'flex h-8 items-center gap-1 rounded-md px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground',
-            align === 'right' && 'ml-auto flex-row-reverse',
+            align === 'right' && 'ms-auto flex-row-reverse',
             className,
           )}
         >
@@ -300,13 +308,13 @@ export function DataTableColumnHeader<TData, TValue>({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         <DropdownMenuItem onClick={() => column.toggleSorting(false)}>
-          <ArrowUp className="h-4 w-4" /> Ascending
+          <ArrowUp className="h-4 w-4" /> {t('table.ascending')}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => column.toggleSorting(true)}>
-          <ArrowDown className="h-4 w-4" /> Descending
+          <ArrowDown className="h-4 w-4" /> {t('table.descending')}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => column.toggleVisibility(false)}>Hide column</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => column.toggleVisibility(false)}>{t('table.hideColumn')}</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

@@ -1,15 +1,19 @@
+import { currentLocale } from '@/lib/i18n'
+
 const currencyFormatters = new Map<string, Intl.NumberFormat>()
 
 function currencyFormatter(currency: string) {
-  let formatter = currencyFormatters.get(currency)
+  const locale = currentLocale()
+  const key = `${locale}:${currency}`
+  let formatter = currencyFormatters.get(key)
   if (!formatter) {
-    formatter = new Intl.NumberFormat('en-US', {
+    formatter = new Intl.NumberFormat(locale, {
       style: 'currency',
       currency,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })
-    currencyFormatters.set(currency, formatter)
+    currencyFormatters.set(key, formatter)
   }
   return formatter
 }
@@ -29,38 +33,66 @@ export function formatMoneyOrDash(value: number | null | undefined, currency = '
   return formatMoney(value, currency)
 }
 
+const numberFormatters = new Map<string, Intl.NumberFormat>()
+
 export function formatNumber(value: number | null | undefined, decimals = 2) {
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(Number(value ?? 0))
+  const locale = currentLocale()
+  const key = `${locale}:${decimals}`
+  let formatter = numberFormatters.get(key)
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(locale, {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    })
+    numberFormatters.set(key, formatter)
+  }
+  return formatter.format(Number(value ?? 0))
 }
 
 export function formatPercent(value: number | null | undefined, decimals = 2) {
   return `${formatNumber(value ?? 0, decimals)}%`
 }
 
-const dateFormatter = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'short', day: '2-digit' })
-const dateTimeFormatter = new Intl.DateTimeFormat('en-US', {
-  year: 'numeric',
-  month: 'short',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-})
+const dateFormatters = new Map<string, Intl.DateTimeFormat>()
 
+function dateFormatter(options: Intl.DateTimeFormatOptions) {
+  const locale = currentLocale()
+  const key = `${locale}:${JSON.stringify(options)}`
+  let formatter = dateFormatters.get(key)
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, options)
+    dateFormatters.set(key, formatter)
+  }
+  return formatter
+}
+
+/** Longer, month-name form used on report headers (e.g. "As of Oct 04, 2026"). */
 export function formatDate(value?: string | Date | null) {
   if (!value) return '—'
   const date = typeof value === 'string' ? new Date(value) : value
   if (Number.isNaN(date.getTime())) return '—'
-  return dateFormatter.format(date)
+  return dateFormatter({ year: 'numeric', month: 'short', day: '2-digit' }).format(date)
 }
 
 export function formatDateTime(value?: string | Date | null) {
   if (!value) return '—'
   const date = typeof value === 'string' ? new Date(value) : value
   if (Number.isNaN(date.getTime())) return '—'
-  return dateTimeFormatter.format(date)
+  return dateFormatter({
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+/** Month + year only — used for period labels. */
+export function formatMonthYear(value?: string | Date | null) {
+  if (!value) return '—'
+  const date = typeof value === 'string' ? new Date(value) : value
+  if (Number.isNaN(date.getTime())) return '—'
+  return dateFormatter({ month: 'long', year: 'numeric' }).format(date)
 }
 
 /** `yyyy-MM-dd` in local time — the format `<input type="date">` and the API expect. */

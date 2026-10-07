@@ -1,4 +1,5 @@
 import { Suspense, lazy } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/layout/app-shell'
 import { PageLoader } from '@/components/common/misc'
@@ -62,8 +63,9 @@ const CashFlowPage = lazy(() =>
 const NotFoundPage = lazy(() => import('@/features/misc/not-found-page').then((m) => ({ default: m.NotFoundPage })))
 
 export function App() {
+  const { t } = useTranslation()
   return (
-    <Suspense fallback={<PageLoader label="Loading module…" />}>
+    <Suspense fallback={<PageLoader label={t('common.loadingModule')} />}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
 

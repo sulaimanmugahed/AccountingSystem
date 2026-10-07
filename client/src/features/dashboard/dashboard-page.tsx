@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   ArrowRight,
   Banknote,
@@ -18,11 +19,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Money, SectionCard, StatCard } from '@/components/common/misc'
 import { useApAging, useArAging, useBalanceSheet, useIncomeStatement, useJournalEntries } from '@/hooks/queries'
-import { journalSourceTypeLabels } from '@/lib/enums'
+import { useLabels } from '@/lib/labels'
 import { endOfMonth, formatDate, formatMoney, startOfYear, today } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 export function DashboardPage() {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const asOf = today()
   const periodStart = startOfYear()
   const periodEnd = endOfMonth()
@@ -39,18 +42,18 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Financial overview"
-        description={`Live position as of ${formatDate(asOf)} — computed straight from the posted journal.`}
+        title={t('dashboard.title')}
+        description={t('dashboard.description', { date: formatDate(asOf) })}
         actions={
           <>
             <Button variant="outline" size="sm" asChild>
               <Link to="/reports">
-                <Scale className="h-4 w-4" /> All reports
+                <Scale className="h-4 w-4" /> {t('dashboard.allReports')}
               </Link>
             </Button>
             <Button size="sm" asChild>
               <Link to="/gl/journal-entries">
-                <BookOpen className="h-4 w-4" /> Journal
+                <BookOpen className="h-4 w-4" /> {t('dashboard.journal')}
               </Link>
             </Button>
           </>
@@ -59,40 +62,40 @@ export function DashboardPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Revenue (YTD to date)"
+          label={t('dashboard.revenueYtd')}
           value={formatMoney(incomeStatement.data?.totalRevenue ?? 0)}
           hint={`${formatDate(periodStart)} → ${formatDate(periodEnd)}`}
           icon={TrendingUp}
         />
         <StatCard
-          label="Net income (YTD)"
+          label={t('dashboard.netIncomeYtd')}
           value={formatMoney(netIncome)}
           tone={netIncome >= 0 ? 'positive' : 'negative'}
-          hint="Revenue less operating expenses"
+          hint={t('dashboard.netIncomeHint')}
           icon={TrendingUp}
         />
         <StatCard
-          label="Accounts receivable"
+          label={t('dashboard.receivable')}
           value={formatMoney(arAging.data?.grandTotal ?? 0)}
-          hint={`${arAging.data?.rows.length ?? 0} customer(s) with open invoices`}
+          hint={t('dashboard.receivableHint', { count: arAging.data?.rows.length ?? 0 })}
           icon={Users}
         />
         <StatCard
-          label="Accounts payable"
+          label={t('dashboard.payable')}
           value={formatMoney(apAging.data?.grandTotal ?? 0)}
-          hint={`${apAging.data?.rows.length ?? 0} vendor(s) with open bills`}
+          hint={t('dashboard.payableHint', { count: apAging.data?.rows.length ?? 0 })}
           icon={Banknote}
         />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <SectionCard
-          title="Balance sheet snapshot"
-          description={`As of ${formatDate(asOf)}`}
+          title={t('dashboard.balanceSheetSnapshot')}
+          description={t('dashboard.asOf', { date: formatDate(asOf) })}
           actions={
             <Button variant="ghost" size="sm" asChild>
               <Link to="/reports/balance-sheet">
-                Details <ArrowRight className="h-4 w-4" />
+                {t('common.details')} <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
           }
@@ -100,7 +103,7 @@ export function DashboardPage() {
         >
           <div className="grid gap-6 sm:grid-cols-3">
             <div className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Assets</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t('dashboard.assets')}</p>
               <p className="text-lg font-semibold tabular-nums">{formatMoney(balanceSheet.data?.totalAssets ?? 0)}</p>
               <div className="space-y-1 text-xs text-muted-foreground">
                 {(balanceSheet.data?.assets ?? []).slice(0, 5).map((row) => (
@@ -114,11 +117,11 @@ export function DashboardPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Liabilities</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t('dashboard.liabilities')}</p>
               <p className="text-lg font-semibold tabular-nums">{formatMoney(balanceSheet.data?.totalLiabilities ?? 0)}</p>
               <div className="space-y-1 text-xs text-muted-foreground">
                 {(balanceSheet.data?.liabilities ?? []).length === 0 ? (
-                  <p>No open liabilities.</p>
+                  <p>{t('dashboard.noLiabilities')}</p>
                 ) : (
                   (balanceSheet.data?.liabilities ?? []).map((row) => (
                     <div key={row.accountCode} className="flex justify-between gap-3">
@@ -132,23 +135,23 @@ export function DashboardPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Equity</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t('dashboard.equity')}</p>
               <p className="text-lg font-semibold tabular-nums">{formatMoney(balanceSheet.data?.totalEquity ?? 0)}</p>
               <div className="space-y-1 text-xs text-muted-foreground">
                 <div className="flex justify-between gap-3">
-                  <span>Opening equity & retained</span>
+                  <span>{t('dashboard.openingEquity')}</span>
                   <span className="tabular-nums">
                     {formatMoney(balanceSheet.data?.totalEquityExcludingNetIncome ?? 0)}
                   </span>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <span>Current year earnings</span>
+                  <span>{t('dashboard.currentYearEarnings')}</span>
                   <span className="tabular-nums">{formatMoney(balanceSheet.data?.netIncomeYearToDate ?? 0)}</span>
                 </div>
               </div>
               <Separator className="my-1" />
               <div className="flex justify-between gap-3 text-xs">
-                <span className="text-muted-foreground">Liabilities + equity</span>
+                <span className="text-muted-foreground">{t('dashboard.liabilitiesAndEquity')}</span>
                 <span className="font-medium tabular-nums">
                   {formatMoney(balanceSheet.data?.totalLiabilitiesAndEquity ?? 0)}
                 </span>
@@ -166,40 +169,40 @@ export function DashboardPage() {
                 {Math.abs(
                   (balanceSheet.data?.totalAssets ?? 0) - (balanceSheet.data?.totalLiabilitiesAndEquity ?? 0),
                 ) < 0.01
-                  ? 'Books balance ✓'
-                  : 'Out of balance — review the journal'}
+                  ? t('dashboard.booksBalance')
+                  : t('dashboard.outOfBalance')}
               </p>
             </div>
           </div>
         </SectionCard>
 
-        <SectionCard title="Cash position" description="Bank & cash GL accounts">
+        <SectionCard title={t('dashboard.cashPosition')} description={t('dashboard.cashPositionHint')}>
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-muted p-2">
                 <Landmark className="h-4 w-4 text-muted-foreground" />
               </div>
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Cash and bank</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('dashboard.cashAndBank')}</p>
                 <p className="text-xl font-semibold tabular-nums">{formatMoney(cash)}</p>
               </div>
             </div>
             <Separator />
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Net cash from operations (YTD)</span>
+                <span className="text-muted-foreground">{t('dashboard.netCashOperations')}</span>
                 <span className="tabular-nums">
                   {formatMoney(incomeStatement.data?.netIncome ?? 0)}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Total expenses (YTD)</span>
+                <span className="text-muted-foreground">{t('dashboard.totalExpenses')}</span>
                 <span className="tabular-nums">{formatMoney(incomeStatement.data?.totalExpense ?? 0)}</span>
               </div>
             </div>
             <Button variant="outline" size="sm" className="w-full" asChild>
               <Link to="/reports/cash-flow">
-                <TrendingDown className="h-4 w-4" /> Cash flow statement
+                <TrendingDown className="h-4 w-4" /> {t('dashboard.cashFlowStatement')}
               </Link>
             </Button>
           </div>
@@ -208,12 +211,12 @@ export function DashboardPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <SectionCard
-          title="Recent journal activity"
-          description="Latest 6 postings"
+          title={t('dashboard.recentActivity')}
+          description={t('dashboard.latestPostings')}
           actions={
             <Button variant="ghost" size="sm" asChild>
               <Link to="/gl/journal-entries">
-                Open ledger <ArrowRight className="h-4 w-4" />
+                {t('dashboard.openLedger')} <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
           }
@@ -225,35 +228,38 @@ export function DashboardPage() {
               <div key={entry.id} className="flex items-center justify-between gap-4 px-5 py-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">
-                    <span className="font-mono text-xs">{entry.entryNumber}</span> · {entry.memo || 'Journal entry'}
+                    <span className="font-mono text-xs">{entry.entryNumber}</span> ·{' '}
+                    {entry.memo || t('dashboard.journalEntryFallback')}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {formatDate(entry.entryDate)} · {journalSourceTypeLabels[entry.sourceType]}
+                    {formatDate(entry.entryDate)} · {labels.journalSourceType[entry.sourceType]}
                   </p>
                 </div>
-                <div className="text-right">
+                <div className="text-end">
                   <Money value={entry.totalDebit} className="text-sm font-medium" />
-                  <p className="text-xs text-muted-foreground">{entry.lines.length} lines</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t('dashboard.lineCount', { count: entry.lines.length })}
+                  </p>
                 </div>
               </div>
             ))}
             {(recentEntries.data ?? []).length === 0 && !recentEntries.isLoading ? (
-              <p className="px-5 py-8 text-center text-sm text-muted-foreground">No journal activity yet.</p>
+              <p className="px-5 py-8 text-center text-sm text-muted-foreground">{t('dashboard.noActivity')}</p>
             ) : null}
           </div>
         </SectionCard>
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Quick actions</CardTitle>
+            <CardTitle className="text-sm">{t('dashboard.quickActions')}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-2">
             {[
-              { to: '/ar/invoices', label: 'Create an invoice', icon: FileText },
-              { to: '/ap/bills', label: 'Enter a vendor bill', icon: Users },
-              { to: '/ar/payments', label: 'Record a customer payment', icon: Banknote },
-              { to: '/gl/journal-entries', label: 'Post a manual journal', icon: BookOpen },
-              { to: '/tax/codes', label: 'Manage tax codes', icon: Percent },
+              { to: '/ar/invoices', label: t('dashboard.createInvoice'), icon: FileText },
+              { to: '/ap/bills', label: t('dashboard.enterBill'), icon: Users },
+              { to: '/ar/payments', label: t('dashboard.recordPayment'), icon: Banknote },
+              { to: '/gl/journal-entries', label: t('dashboard.postJournal'), icon: BookOpen },
+              { to: '/tax/codes', label: t('dashboard.manageTaxCodes'), icon: Percent },
             ].map((action) => (
               <Button key={action.to} variant="outline" className="justify-start" asChild>
                 <Link to={action.to}>
@@ -262,7 +268,7 @@ export function DashboardPage() {
               </Button>
             ))}
             <Badge variant="secondary" className="mt-2 w-fit">
-              Role-based access enforced client & server side
+              {t('dashboard.roleNotice')}
             </Badge>
           </CardContent>
         </Card>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Controller, useFieldArray, useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
+import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -26,38 +27,45 @@ import { EmptyState, ErrorState, Money } from '@/components/common/misc'
 import { useAccounts, useJournalEntries } from '@/hooks/queries'
 import { useCreateJournalEntry, useReverseJournalEntry } from '@/hooks/mutations'
 import { useAuth } from '@/lib/auth'
-import { journalEntryStatusLabels, journalSourceTypeLabels, JournalSourceType } from '@/lib/enums'
-import { formatDate, today } from '@/lib/format'
+import { JournalSourceType } from '@/lib/enums'
+import { useLabels } from '@/lib/labels'
+import { formatDate, formatMoney, today } from '@/lib/format'
 import { cn, toNumber } from '@/lib/utils'
 import { journalStatusTone, type JournalEntry } from '@/lib/types'
 
-const lineSchema = z
-  .object({
-    accountId: z.string().min(1, 'Choose an account'),
-    description: z.string().max(200).optional().or(z.literal('')),
-    debit: z.coerce.number().min(0, 'Cannot be negative'),
-    credit: z.coerce.number().min(0, 'Cannot be negative'),
-  })
-  .refine((line) => !(line.debit > 0 && line.credit > 0), {
-    message: 'A line cannot be both a debit and a credit',
-    path: ['credit'],
-  })
-  .refine((line) => line.debit > 0 || line.credit > 0, {
-    message: 'Enter a debit or a credit',
-    path: ['debit'],
-  })
+type Translate = (key: string, options?: Record<string, unknown>) => string
 
-const entrySchema = z.object({
-  entryDate: z.string().min(1, 'Entry date is required'),
-  memo: z.string().max(300).optional().or(z.literal('')),
-  currencyCode: z.string().min(3).max(3),
-  exchangeRateToBase: z.coerce.number().positive('Rate must be greater than zero'),
-  lines: z.array(lineSchema).min(2, 'A journal entry needs at least two lines'),
-})
+const entrySchema = (t: Translate) => {
+  const lineSchema = z
+    .object({
+      accountId: z.string().min(1, t('journal.errChooseAccount')),
+      description: z.string().max(200).optional().or(z.literal('')),
+      debit: z.coerce.number().min(0, t('journal.errNegative')),
+      credit: z.coerce.number().min(0, t('journal.errNegative')),
+    })
+    .refine((line) => !(line.debit > 0 && line.credit > 0), {
+      message: t('journal.errDebitAndCredit'),
+      path: ['credit'],
+    })
+    .refine((line) => line.debit > 0 || line.credit > 0, {
+      message: t('journal.errDebitOrCredit'),
+      path: ['debit'],
+    })
 
-type EntryFormValues = z.infer<typeof entrySchema>
+  return z.object({
+    entryDate: z.string().min(1, t('journal.errEntryDateRequired')),
+    memo: z.string().max(300).optional().or(z.literal('')),
+    currencyCode: z.string().min(3).max(3),
+    exchangeRateToBase: z.coerce.number().positive(t('journal.errRatePositive')),
+    lines: z.array(lineSchema).min(2, t('journal.errMinLines')),
+  })
+}
+
+type EntryFormValues = z.infer<ReturnType<typeof entrySchema>>
 
 export function JournalEntriesPage() {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const { hasRole } = useAuth()
   const canPost = hasRole('Admin', 'Accountant')
 
@@ -87,31 +95,31 @@ export function JournalEntriesPage() {
     () => [
       {
         accessorKey: 'entryNumber',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Entry #" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('journal.entryNumber')} />,
         cell: ({ row }) => <span className="font-mono text-xs font-medium">{row.original.entryNumber}</span>,
       },
       {
         accessorKey: 'entryDate',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Date" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('common.date')} />,
         cell: ({ row }) => <span className="whitespace-nowrap">{formatDate(row.original.entryDate)}</span>,
       },
       {
         accessorKey: 'sourceType',
-        header: 'Source',
+        header: t('journal.source'),
         cell: ({ row }) => (
-          <Badge variant="secondary">{journalSourceTypeLabels[row.original.sourceType] ?? 'Manual'}</Badge>
+          <Badge variant="secondary">{labels.journalSourceType[row.original.sourceType]}</Badge>
         ),
       },
       {
         accessorKey: 'memo',
-        header: 'Memo',
+        header: t('common.memo'),
         cell: ({ row }) => (
           <span className="line-clamp-1 max-w-[320px] text-muted-foreground">{row.original.memo || '—'}</span>
         ),
       },
       {
         id: 'accounts',
-        header: 'Accounts',
+        header: t('journal.accounts'),
         enableSorting: false,
         cell: ({ row }) => (
           <div className="max-w-[360px] space-y-0.5">
@@ -128,7 +136,7 @@ export function JournalEntriesPage() {
       },
       {
         accessorKey: 'totalDebit',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Debit" align="right" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('journal.debit')} align="right" />,
         cell: ({ row }) => (
           <div className="text-right">
             <Money value={row.original.totalDebit} />
@@ -137,7 +145,7 @@ export function JournalEntriesPage() {
       },
       {
         accessorKey: 'totalCredit',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Credit" align="right" />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={t('journal.credit')} align="right" />,
         cell: ({ row }) => (
           <div className="text-right">
             <Money value={row.original.totalCredit} />
@@ -146,10 +154,10 @@ export function JournalEntriesPage() {
       },
       {
         accessorKey: 'status',
-        header: 'Status',
+        header: t('common.status'),
         cell: ({ row }) => (
           <Badge variant={journalStatusTone[row.original.status] ?? 'secondary'}>
-            {journalEntryStatusLabels[row.original.status] ?? '—'}
+            {labels.journalStatus[row.original.status] ?? t('common.dash')}
           </Badge>
         ),
       },
@@ -161,7 +169,7 @@ export function JournalEntriesPage() {
         cell: ({ row }) => (
           <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
             <Button variant="ghost" size="sm" onClick={() => setSelected(row.original)}>
-              <Eye className="h-4 w-4" /> View
+              <Eye className="h-4 w-4" /> {t('common.view')}
             </Button>
             <Button
               variant="ghost"
@@ -169,28 +177,28 @@ export function JournalEntriesPage() {
               disabled={!canPost || row.original.status !== 2}
               onClick={() => setEntryToReverse(row.original)}
             >
-              <RotateCcw className="h-4 w-4" /> Reverse
+              <RotateCcw className="h-4 w-4" /> {t('journal.reverse')}
             </Button>
           </div>
         ),
       },
     ],
-    [canPost],
+    [canPost, labels, t],
   )
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Journal entries"
-        description="Append-only double-entry ledger. Entries are validated for balance and for an open fiscal period; corrections are made by posting a reversal."
-        breadcrumbs={[{ label: 'General Ledger' }, { label: 'Journal Entries' }]}
+        title={t('journal.title')}
+        description={t('journal.description')}
+        breadcrumbs={[{ label: t('nav.groups.generalLedger') }, { label: t('journal.breadcrumb') }]}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => entriesQuery.refetch()} loading={entriesQuery.isFetching}>
-              <RefreshCw className="h-4 w-4" /> Refresh
+              <RefreshCw className="h-4 w-4" /> {t('common.refresh')}
             </Button>
             <Button size="sm" disabled={!canPost} onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4" /> New entry
+              <Plus className="h-4 w-4" /> {t('journal.newEntry')}
             </Button>
           </>
         }
@@ -199,39 +207,41 @@ export function JournalEntriesPage() {
       <div className="grid gap-3 sm:grid-cols-3">
         <Card>
           <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Entries in view</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('journal.entriesInView')}</p>
             <p className="text-2xl font-semibold tabular-nums">{entries.length}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Posted</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('journal.posted')}</p>
             <p className="text-2xl font-semibold tabular-nums">{totals.posted}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Total debits</p>
-            <p className="text-2xl font-semibold tabular-nums">{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totals.debit)}</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('journal.totalDebits')}</p>
+            <p className="text-2xl font-semibold tabular-nums">
+              <Money value={totals.debit} />
+            </p>
           </CardContent>
         </Card>
       </div>
 
       {entriesQuery.error ? (
-        <ErrorState error={entriesQuery.error} onRetry={() => entriesQuery.refetch()} title="Could not load journal entries" />
+        <ErrorState error={entriesQuery.error} onRetry={() => entriesQuery.refetch()} title={t('journal.couldNotLoad')} />
       ) : (
         <DataTable
           columns={columns}
           data={entries}
           isLoading={entriesQuery.isLoading}
-          searchPlaceholder="Search by entry number, memo or account…"
+          searchPlaceholder={t('journal.searchPlaceholder')}
           getRowId={(row) => row.id}
           onRowClick={(row) => setSelected(row)}
           initialSorting={[{ id: 'entryDate', desc: true }]}
           toolbar={
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">From</span>
+                <span className="text-xs text-muted-foreground">{t('common.from')}</span>
                 <Input
                   type="date"
                   value={fromDate}
@@ -241,7 +251,7 @@ export function JournalEntriesPage() {
                 />
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">To</span>
+                <span className="text-xs text-muted-foreground">{t('common.to')}</span>
                 <Input
                   type="date"
                   value={toDate}
@@ -259,7 +269,7 @@ export function JournalEntriesPage() {
                     setToDate('')
                   }}
                 >
-                  Clear
+                  {t('journal.clear')}
                 </Button>
               ) : null}
             </div>
@@ -273,13 +283,13 @@ export function JournalEntriesPage() {
       <ConfirmDialog
         open={!!entryToReverse}
         onOpenChange={(open) => !open && setEntryToReverse(null)}
-        title="Post a reversing entry?"
+        title={t('journal.reverseTitle')}
         description={
           entryToReverse
-            ? `${entryToReverse.entryNumber} will be reversed with an equal and opposite entry dated today. The original entry stays in the ledger, marked as reversed.`
+            ? t('journal.reverseDescription', { entry: entryToReverse.entryNumber })
             : undefined
         }
-        confirmLabel="Post reversal"
+        confirmLabel={t('journal.postReversal')}
         loading={reverseEntry.isPending}
         onConfirm={() => {
           if (!entryToReverse) return
@@ -300,6 +310,8 @@ function JournalEntryDetailDialog({
   entry: JournalEntry | null
   onOpenChange: (open: boolean) => void
 }) {
+  const { t } = useTranslation()
+  const labels = useLabels()
   return (
     <Dialog open={!!entry} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
@@ -307,11 +319,11 @@ function JournalEntryDetailDialog({
           <DialogTitle className="flex items-center gap-2">
             <span className="font-mono">{entry?.entryNumber}</span>
             {entry ? (
-              <Badge variant={journalStatusTone[entry.status] ?? 'secondary'}>{journalEntryStatusLabels[entry.status]}</Badge>
+              <Badge variant={journalStatusTone[entry.status] ?? 'secondary'}>{labels.journalStatus[entry.status]}</Badge>
             ) : null}
           </DialogTitle>
           <DialogDescription>
-            {entry ? `${formatDate(entry.entryDate)} · ${journalSourceTypeLabels[entry.sourceType] ?? 'Manual'}` : ''}
+            {entry ? `${formatDate(entry.entryDate)} · ${labels.journalSourceType[entry.sourceType]}` : ''}
             {entry?.memo ? ` · ${entry.memo}` : ''}
           </DialogDescription>
         </DialogHeader>
@@ -320,11 +332,11 @@ function JournalEntryDetailDialog({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-24">Account</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-right">Debit</TableHead>
-                <TableHead className="text-right">Credit</TableHead>
+                <TableHead className="w-24">{t('journal.account')}</TableHead>
+                <TableHead>{t('common.name')}</TableHead>
+                <TableHead>{t('common.description')}</TableHead>
+                <TableHead className="text-end">{t('journal.debit')}</TableHead>
+                <TableHead className="text-end">{t('journal.credit')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -332,12 +344,12 @@ function JournalEntryDetailDialog({
                 <TableRow key={`${line.accountId}-${index}`}>
                   <TableCell className="font-mono text-xs">{line.accountCode}</TableCell>
                   <TableCell>{line.accountName}</TableCell>
-                  <TableCell className="text-muted-foreground">{line.description || '—'}</TableCell>
-                  <TableCell className="text-right">
-                    {line.debit ? <Money value={line.debit} /> : <span className="text-muted-foreground">—</span>}
+                  <TableCell className="text-muted-foreground">{line.description || t('common.dash')}</TableCell>
+                  <TableCell className="text-end">
+                    {line.debit ? <Money value={line.debit} /> : <span className="text-muted-foreground">{t('common.dash')}</span>}
                   </TableCell>
-                  <TableCell className="text-right">
-                    {line.credit ? <Money value={line.credit} /> : <span className="text-muted-foreground">—</span>}
+                  <TableCell className="text-end">
+                    {line.credit ? <Money value={line.credit} /> : <span className="text-muted-foreground">{t('common.dash')}</span>}
                   </TableCell>
                 </TableRow>
               ))}
@@ -346,10 +358,10 @@ function JournalEntryDetailDialog({
         </div>
 
         <div className="flex items-center justify-between rounded-lg bg-muted/50 px-4 py-2 text-sm">
-          <span className="text-muted-foreground">Totals</span>
+          <span className="text-muted-foreground">{t('journal.totals')}</span>
           <div className="flex gap-6 tabular-nums">
-            <span>Debit {entry ? <Money value={entry.totalDebit} /> : null}</span>
-            <span>Credit {entry ? <Money value={entry.totalCredit} /> : null}</span>
+            <span>{t('journal.debit')} {entry ? <Money value={entry.totalDebit} /> : null}</span>
+            <span>{t('journal.credit')} {entry ? <Money value={entry.totalCredit} /> : null}</span>
           </div>
         </div>
       </DialogContent>
@@ -364,11 +376,12 @@ function CreateJournalEntryDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { t } = useTranslation()
   const accountsQuery = useAccounts()
   const createEntry = useCreateJournalEntry()
 
   const form = useForm<EntryFormValues>({
-    resolver: zodResolver(entrySchema),
+    resolver: zodResolver(entrySchema(t)),
     defaultValues: {
       entryDate: today(),
       memo: '',
@@ -382,7 +395,7 @@ function CreateJournalEntryDialog({
   })
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'lines' })
-  const watchedLines = form.watch('lines')
+  const watchedLines = useWatch({ control: form.control, name: 'lines' })
 
   const accountOptions = useMemo(
     () =>
@@ -434,10 +447,8 @@ function CreateJournalEntryDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl">
         <DialogHeader>
-          <DialogTitle>New journal entry</DialogTitle>
-          <DialogDescription>
-            Manual entries post immediately. The server rejects unbalanced entries and dates outside an open period.
-          </DialogDescription>
+          <DialogTitle>{t('journal.newEntryTitle')}</DialogTitle>
+          <DialogDescription>{t('journal.newEntryDescription')}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -446,37 +457,39 @@ function CreateJournalEntryDialog({
               <FormField
                 control={form.control}
                 name="entryDate"
-                render={({ field }) => <DateField label="Entry date" required {...field} />}
+                render={({ field }) => <DateField label={t('journal.entryDate')} required {...field} />}
               />
               <FormField
                 control={form.control}
                 name="currencyCode"
-                render={({ field }) => <TextField label="Currency" maxLength={3} {...field} />}
+                render={({ field }) => <TextField label={t('common.currency')} maxLength={3} {...field} />}
               />
               <FormField
                 control={form.control}
                 name="exchangeRateToBase"
                 render={({ field }) => (
-                  <TextField label="Exchange rate" type="number" step="any" className="text-right" {...field} />
+                  <TextField label={t('common.exchangeRate')} type="number" step="any" className="text-end" {...field} />
                 )}
               />
               <FormField
                 control={form.control}
                 name="memo"
-                render={({ field }) => <TextField label="Memo" placeholder="What is this entry for?" {...field} value={field.value ?? ''} />}
+                render={({ field }) => (
+                  <TextField label={t('common.memo')} placeholder={t('journal.memoPlaceholder')} {...field} value={field.value ?? ''} />
+                )}
               />
             </div>
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Lines</p>
+                <p className="text-sm font-medium">{t('journal.lines')}</p>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => append({ accountId: '', description: '', debit: 0, credit: 0 })}
                 >
-                  <Plus className="h-4 w-4" /> Add line
+                  <Plus className="h-4 w-4" /> {t('journal.addLine')}
                 </Button>
               </div>
 
@@ -489,11 +502,11 @@ function CreateJournalEntryDialog({
                       render={({ field: accountField, fieldState }) => (
                         <div className="space-y-1">
                           <ComboboxField
-                            label={index === 0 ? 'Account' : undefined}
+                            label={index === 0 ? t('journal.account') : undefined}
                             options={accountOptions}
                             value={accountField.value}
                             onChange={(value) => accountField.onChange(value ?? '')}
-                            placeholder="Select account"
+                            placeholder={t('journal.selectAccount')}
                             allowClear={false}
                           />
                           {fieldState.error ? (
@@ -507,8 +520,8 @@ function CreateJournalEntryDialog({
                       name={`lines.${index}.description`}
                       render={({ field: descriptionField }) => (
                         <TextField
-                          label={index === 0 ? 'Description' : undefined}
-                          placeholder="Line memo"
+                          label={index === 0 ? t('common.description') : undefined}
+                          placeholder={t('journal.lineMemo')}
                           {...descriptionField}
                           value={descriptionField.value ?? ''}
                         />
@@ -519,11 +532,11 @@ function CreateJournalEntryDialog({
                       name={`lines.${index}.debit`}
                       render={({ field: debitField }) => (
                         <TextField
-                          label={index === 0 ? 'Debit' : undefined}
+                          label={index === 0 ? t('journal.debit') : undefined}
                           type="number"
                           step="any"
                           min={0}
-                          className="text-right tabular-nums"
+                          className="text-end tabular-nums"
                           {...debitField}
                         />
                       )}
@@ -533,11 +546,11 @@ function CreateJournalEntryDialog({
                       name={`lines.${index}.credit`}
                       render={({ field: creditField }) => (
                         <TextField
-                          label={index === 0 ? 'Credit' : undefined}
+                          label={index === 0 ? t('journal.credit') : undefined}
                           type="number"
                           step="any"
                           min={0}
-                          className="text-right tabular-nums"
+                          className="text-end tabular-nums"
                           {...creditField}
                         />
                       )}
@@ -571,33 +584,31 @@ function CreateJournalEntryDialog({
               <div className="flex items-center gap-2">
                 <ArrowLeftRight className={cn('h-4 w-4', totals.balanced ? 'text-success' : 'text-warning')} />
                 <span>
-                  {totals.balanced
-                    ? 'Entry is balanced and ready to post.'
-                    : 'Debits must equal credits before the entry can be posted.'}
+                  {totals.balanced ? t('journal.balanced') : t('journal.unbalanced')}
                 </span>
               </div>
               <div className="flex gap-6 tabular-nums">
                 <span>
-                  Debits <strong>{totals.debit.toFixed(2)}</strong>
+                  {t('journal.debtsLabel')} <strong>{formatMoney(totals.debit)}</strong>
                 </span>
                 <span>
-                  Credits <strong>{totals.credit.toFixed(2)}</strong>
+                  {t('journal.creditsLabel')} <strong>{formatMoney(totals.credit)}</strong>
                 </span>
                 <span className={cn(Math.abs(totals.debit - totals.credit) < 0.005 ? 'text-muted-foreground' : 'text-warning')}>
-                  Difference <strong>{(totals.debit - totals.credit).toFixed(2)}</strong>
+                  {t('journal.difference')} <strong>{formatMoney(totals.debit - totals.credit)}</strong>
                 </span>
               </div>
             </div>
 
             {accountOptions.length === 0 && !accountsQuery.isLoading ? (
-              <EmptyState title="No active accounts" description="Create accounts in the chart of accounts first." />
+              <EmptyState title={t('journal.noActiveAccounts')} description={t('journal.noActiveAccountsHint')} />
             ) : null}
           </form>
         </Form>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             type="submit"
@@ -605,7 +616,7 @@ function CreateJournalEntryDialog({
             loading={createEntry.isPending}
             disabled={!totals.balanced}
           >
-            Post entry
+            {t('journal.postEntry')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { CalendarClock, Lock, LockOpen, RefreshCw } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { Badge } from '@/components/ui/badge'
@@ -17,11 +18,14 @@ import { ErrorState, StatCard } from '@/components/common/misc'
 import { useFiscalPeriods, useFiscalYears } from '@/hooks/queries'
 import { useCloseFiscalYear, useClosePeriod, useReopenPeriod } from '@/hooks/mutations'
 import { useAuth } from '@/lib/auth'
-import { fiscalPeriodStatusLabels, FiscalPeriodStatus } from '@/lib/enums'
+import { FiscalPeriodStatus } from '@/lib/enums'
+import { useLabels } from '@/lib/labels'
 import { formatDate } from '@/lib/format'
 import type { FiscalPeriod } from '@/lib/types'
 
 export function FiscalPeriodsPage() {
+  const { t } = useTranslation()
+  const labels = useLabels()
   const { hasRole } = useAuth()
   const canManage = hasRole('Admin', 'Accountant')
 
@@ -51,13 +55,13 @@ export function FiscalPeriodsPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Fiscal periods"
-        description="Journal entries can only be posted into an open period. Closing a year posts the closing entry that rolls revenue and expenses into retained earnings."
-        breadcrumbs={[{ label: 'General Ledger' }, { label: 'Fiscal Periods' }]}
+        title={t('periods.title')}
+        description={t('periods.description')}
+        breadcrumbs={[{ label: t('nav.groups.generalLedger') }, { label: t('periods.breadcrumb') }]}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => yearsQuery.refetch()} loading={yearsQuery.isFetching}>
-              <RefreshCw className="h-4 w-4" /> Refresh
+              <RefreshCw className="h-4 w-4" /> {t('common.refresh')}
             </Button>
             <Button
               size="sm"
@@ -65,33 +69,42 @@ export function FiscalPeriodsPage() {
               disabled={!canManage || !activeYear || activeYear.isClosed}
               onClick={() => setYearToClose(true)}
             >
-              <Lock className="h-4 w-4" /> Close fiscal year
+              <Lock className="h-4 w-4" /> {t('periods.closeYear')}
             </Button>
           </>
         }
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Fiscal years" value={years.length} hint={`${years.filter((year) => !year.isClosed).length} open`} icon={CalendarClock} />
-        <StatCard label="Selected year" value={activeYear?.name ?? '—'} hint={activeYear ? `${formatDate(activeYear.startDate)} → ${formatDate(activeYear.endDate)}` : undefined} />
-        <StatCard label="Open periods" value={openCount} />
-        <StatCard label="Closed periods" value={periods.length - openCount} />
+        <StatCard
+          label={t('periods.statYears')}
+          value={years.length}
+          hint={t('periods.statOpenCount', { count: years.filter((year) => !year.isClosed).length })}
+          icon={CalendarClock}
+        />
+        <StatCard
+          label={t('periods.statSelectedYear')}
+          value={activeYear?.name ?? t('common.dash')}
+          hint={activeYear ? `${formatDate(activeYear.startDate)} → ${formatDate(activeYear.endDate)}` : undefined}
+        />
+        <StatCard label={t('periods.statOpenPeriods')} value={openCount} />
+        <StatCard label={t('periods.statClosedPeriods')} value={periods.length - openCount} />
       </div>
 
       {yearsQuery.error ? (
-        <ErrorState error={yearsQuery.error} onRetry={() => yearsQuery.refetch()} title="Could not load fiscal years" />
+        <ErrorState error={yearsQuery.error} onRetry={() => yearsQuery.refetch()} title={t('periods.couldNotLoadYears')} />
       ) : (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-sm">Periods</CardTitle>
+            <CardTitle className="text-sm">{t('periods.periods')}</CardTitle>
             <Select value={activeYearId} onValueChange={setSelectedYearId}>
               <SelectTrigger className="h-8 w-[200px]">
-                <SelectValue placeholder="Select fiscal year" />
+                <SelectValue placeholder={t('periods.selectYear')} />
               </SelectTrigger>
               <SelectContent>
                 {years.map((year) => (
                   <SelectItem key={year.id} value={year.id}>
-                    {year.name} {year.isClosed ? '(closed)' : ''}
+                    {year.name} {year.isClosed ? t('periods.closedSuffix') : ''}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -107,19 +120,19 @@ export function FiscalPeriodsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>#</TableHead>
-                    <TableHead>Period</TableHead>
-                    <TableHead>Start</TableHead>
-                    <TableHead>End</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Closed by</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
+                    <TableHead>{t('periods.period')}</TableHead>
+                    <TableHead>{t('periods.start')}</TableHead>
+                    <TableHead>{t('periods.end')}</TableHead>
+                    <TableHead>{t('common.status')}</TableHead>
+                    <TableHead>{t('periods.closedBy')}</TableHead>
+                    <TableHead className="text-end">{t('periods.action')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {periods.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
-                        No periods for this fiscal year.
+                        {t('periods.noPeriods')}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -131,14 +144,14 @@ export function FiscalPeriodsPage() {
                         <TableCell>{formatDate(period.endDate)}</TableCell>
                         <TableCell>
                           <Badge variant={period.status === FiscalPeriodStatus.Open ? 'success' : 'secondary'}>
-                            {fiscalPeriodStatusLabels[period.status] ?? '—'}
+                            {labels.fiscalPeriodStatus[period.status] ?? t('common.dash')}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          {period.closedBy ?? '—'}
+                          {period.closedBy ?? t('common.dash')}
                           {period.closedAtUtc ? <span className="block">{formatDate(period.closedAtUtc)}</span> : null}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-end">
                           {period.status === FiscalPeriodStatus.Open ? (
                             <Button
                               size="sm"
@@ -146,7 +159,7 @@ export function FiscalPeriodsPage() {
                               disabled={!canManage}
                               onClick={() => setPeriodToClose(period)}
                             >
-                              <Lock className="h-4 w-4" /> Close
+                              <Lock className="h-4 w-4" /> {t('periods.close')}
                             </Button>
                           ) : (
                             <Button
@@ -155,7 +168,7 @@ export function FiscalPeriodsPage() {
                               disabled={!canManage}
                               onClick={() => setPeriodToReopen(period)}
                             >
-                              <LockOpen className="h-4 w-4" /> Reopen
+                              <LockOpen className="h-4 w-4" /> {t('periods.reopen')}
                             </Button>
                           )}
                         </TableCell>
@@ -172,13 +185,11 @@ export function FiscalPeriodsPage() {
       <ConfirmDialog
         open={!!periodToClose}
         onOpenChange={(open) => !open && setPeriodToClose(null)}
-        title="Close fiscal period?"
+        title={t('periods.closePeriodTitle')}
         description={
-          periodToClose
-            ? `${periodToClose.name} will stop accepting new postings until it is reopened. Existing entries are unaffected.`
-            : undefined
+          periodToClose ? t('periods.closePeriodDescription', { period: periodToClose.name }) : undefined
         }
-        confirmLabel="Close period"
+        confirmLabel={t('periods.closePeriodConfirm')}
         loading={closePeriod.isPending}
         onConfirm={() => {
           if (!periodToClose) return
@@ -189,9 +200,11 @@ export function FiscalPeriodsPage() {
       <ConfirmDialog
         open={!!periodToReopen}
         onOpenChange={(open) => !open && setPeriodToReopen(null)}
-        title="Reopen fiscal period?"
-        description={periodToReopen ? `${periodToReopen.name} will accept new postings again.` : undefined}
-        confirmLabel="Reopen period"
+        title={t('periods.reopenPeriodTitle')}
+        description={
+          periodToReopen ? t('periods.reopenPeriodDescription', { period: periodToReopen.name }) : undefined
+        }
+        confirmLabel={t('periods.reopenPeriodConfirm')}
         destructive
         loading={reopenPeriod.isPending}
         onConfirm={() => {
@@ -203,13 +216,13 @@ export function FiscalPeriodsPage() {
       <ConfirmDialog
         open={yearToClose}
         onOpenChange={setYearToClose}
-        title="Close the fiscal year?"
+        title={t('periods.closeYearTitle')}
         description={
           activeYear
-            ? `${activeYear.name} will be closed: all periods are locked and a closing entry transfers the year's revenue and expenses to retained earnings. This is normally done once a year.`
+            ? t('periods.closeYearDescription', { year: activeYear.name })
             : undefined
         }
-        confirmLabel="Close fiscal year"
+        confirmLabel={t('periods.closeYearConfirm')}
         destructive
         loading={closeYear.isPending}
         onConfirm={() => {

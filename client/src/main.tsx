@@ -8,6 +8,7 @@ import { ThemeProvider } from '@/lib/theme'
 import { Toaster } from '@/components/ui/toaster'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { App } from '@/app/app'
+import '@/lib/i18n'
 import '@/index.css'
 
 async function bootstrap() {

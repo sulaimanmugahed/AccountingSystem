@@ -76,7 +76,12 @@ explored without the .NET SDK.
 
 **Stack:** Vite + React 19 + TypeScript · TanStack Query (server state) · TanStack Table
 (every table, sorting/filtering/pagination) · React Hook Form + Zod (every form) ·
-shadcn/ui-style components on Tailwind CSS · React Router.
+shadcn/ui-style components on Tailwind CSS · React Router · i18next (English + العربية).
+
+The UI is bilingual: every screen is translated, Arabic flips the layout to
+right-to-left (logical Tailwind utilities throughout) and money/date/number formatting
+follows the selected language. Pick the language from the switcher in the top bar; the
+choice is remembered in `localStorage`.
 
 ### Run it against the real API
 

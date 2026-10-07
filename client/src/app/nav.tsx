@@ -18,7 +18,8 @@ import {
 } from 'lucide-react'
 
 export interface NavItem {
-  title: string
+  /** i18n key resolved by the consumer (see AppShell). */
+  titleKey: string
   href: string
   icon?: React.ComponentType<{ className?: string }>
   /** Roles allowed to see the entry. Empty = everyone. */
@@ -27,66 +28,67 @@ export interface NavItem {
 }
 
 export interface NavGroup {
-  title: string
+  /** i18n key resolved by the consumer (see AppShell). */
+  titleKey: string
   items: NavItem[]
 }
 
 export const navGroups: NavGroup[] = [
   {
-    title: 'Overview',
+    titleKey: 'nav.groups.overview',
     items: [
-      { title: 'Dashboard', href: '/', icon: LayoutDashboard },
-      { title: 'Reports', href: '/reports', icon: BarChart3 },
+      { titleKey: 'nav.items.dashboard', href: '/', icon: LayoutDashboard },
+      { titleKey: 'nav.items.reports', href: '/reports', icon: BarChart3 },
     ],
   },
   {
-    title: 'General Ledger',
+    titleKey: 'nav.groups.generalLedger',
     items: [
-      { title: 'Chart of Accounts', href: '/gl/accounts', icon: Library },
-      { title: 'Journal Entries', href: '/gl/journal-entries', icon: BookOpen },
-      { title: 'Fiscal Periods', href: '/gl/fiscal-periods', icon: CalendarClock },
+      { titleKey: 'nav.items.accounts', href: '/gl/accounts', icon: Library },
+      { titleKey: 'nav.items.journalEntries', href: '/gl/journal-entries', icon: BookOpen },
+      { titleKey: 'nav.items.fiscalPeriods', href: '/gl/fiscal-periods', icon: CalendarClock },
     ],
   },
   {
-    title: 'Receivables',
+    titleKey: 'nav.groups.receivables',
     items: [
-      { title: 'Customers', href: '/ar/customers', icon: Users },
-      { title: 'Invoices', href: '/ar/invoices', icon: FileText },
-      { title: 'Payments', href: '/ar/payments', icon: Wallet },
+      { titleKey: 'nav.items.customers', href: '/ar/customers', icon: Users },
+      { titleKey: 'nav.items.invoices', href: '/ar/invoices', icon: FileText },
+      { titleKey: 'nav.items.customerPayments', href: '/ar/payments', icon: Wallet },
     ],
   },
   {
-    title: 'Payables',
+    titleKey: 'nav.groups.payables',
     items: [
-      { title: 'Vendors', href: '/ap/vendors', icon: Users },
-      { title: 'Bills', href: '/ap/bills', icon: ScrollText },
-      { title: 'Payments', href: '/ap/payments', icon: CreditCard },
+      { titleKey: 'nav.items.vendors', href: '/ap/vendors', icon: Users },
+      { titleKey: 'nav.items.bills', href: '/ap/bills', icon: ScrollText },
+      { titleKey: 'nav.items.vendorPayments', href: '/ap/payments', icon: CreditCard },
     ],
   },
   {
-    title: 'Assets & Banking',
+    titleKey: 'nav.groups.assetsBanking',
     items: [
-      { title: 'Bank Accounts', href: '/banking/accounts', icon: Landmark },
-      { title: 'Items & Inventory', href: '/inventory/items', icon: Boxes },
-      { title: 'Fixed Assets', href: '/assets/fixed-assets', icon: PiggyBank },
+      { titleKey: 'nav.items.bankAccounts', href: '/banking/accounts', icon: Landmark },
+      { titleKey: 'nav.items.items', href: '/inventory/items', icon: Boxes },
+      { titleKey: 'nav.items.fixedAssets', href: '/assets/fixed-assets', icon: PiggyBank },
     ],
   },
   {
-    title: 'Configuration',
+    titleKey: 'nav.groups.configuration',
     items: [
-      { title: 'Budgets', href: '/budgets', icon: FileSpreadsheet },
-      { title: 'Tax Codes', href: '/tax/codes', icon: Percent },
-      { title: 'Company', href: '/settings/company', icon: Receipt },
+      { titleKey: 'nav.items.budgets', href: '/budgets', icon: FileSpreadsheet },
+      { titleKey: 'nav.items.taxCodes', href: '/tax/codes', icon: Percent },
+      { titleKey: 'nav.items.company', href: '/settings/company', icon: Receipt },
     ],
   },
 ]
 
 export const reportLinks: NavItem[] = [
-  { title: 'Trial Balance', href: '/reports/trial-balance' },
-  { title: 'Income Statement', href: '/reports/income-statement' },
-  { title: 'Balance Sheet', href: '/reports/balance-sheet' },
-  { title: 'General Ledger', href: '/reports/general-ledger' },
-  { title: 'AR Aging', href: '/reports/ar-aging' },
-  { title: 'AP Aging', href: '/reports/ap-aging' },
-  { title: 'Cash Flow', href: '/reports/cash-flow' },
+  { titleKey: 'reports.trialBalance.title', href: '/reports/trial-balance' },
+  { titleKey: 'reports.incomeStatement.title', href: '/reports/income-statement' },
+  { titleKey: 'reports.balanceSheet.title', href: '/reports/balance-sheet' },
+  { titleKey: 'reports.generalLedger.title', href: '/reports/general-ledger' },
+  { titleKey: 'reports.arAging.title', href: '/reports/ar-aging' },
+  { titleKey: 'reports.apAging.title', href: '/reports/ap-aging' },
+  { titleKey: 'reports.cashFlow.title', href: '/reports/cash-flow' },
 ]

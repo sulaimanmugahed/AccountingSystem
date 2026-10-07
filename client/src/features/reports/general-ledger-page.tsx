@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -16,6 +17,7 @@ import {
 } from '@/components/ui/select'
 
 export function GeneralLedgerPage() {
+  const { t } = useTranslation()
   const accountsQuery = useAccounts()
   const accounts = useMemo(() => accountsQuery.data ?? [], [accountsQuery.data])
 
@@ -28,8 +30,8 @@ export function GeneralLedgerPage() {
 
   return (
     <ReportPage
-      title="General ledger detail"
-      description="Every posted line for one account, with an opening balance and a running balance that respects the account's normal balance."
+      title={t('reports.generalLedger.title')}
+      description={t('reports.generalLedger.description')}
       onRefresh={() => report.refetch()}
       isLoading={report.isLoading || accountsQuery.isLoading}
       error={report.error ?? accountsQuery.error}
@@ -48,12 +50,20 @@ export function GeneralLedgerPage() {
         )
       }
       controls={
-        <DateRangeControls from={startDate} to={endDate} onFromChange={setStartDate} onToChange={setEndDate} toLabel="To">
+        <DateRangeControls
+          from={startDate}
+          to={endDate}
+          onFromChange={setStartDate}
+          onToChange={setEndDate}
+          toLabel={t('common.to')}
+        >
           <div className="space-y-1">
-            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Account</label>
+            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {t('reports.generalLedger.account')}
+            </label>
             <Select value={activeAccountId} onValueChange={setAccountId}>
               <SelectTrigger className="w-[280px]">
-                <SelectValue placeholder="Select an account" />
+                <SelectValue placeholder={t('reports.generalLedger.selectAccount')} />
               </SelectTrigger>
               <SelectContent>
                 {accounts.map((account) => (
@@ -70,39 +80,55 @@ export function GeneralLedgerPage() {
       <ReportTableShell
         footer={
           <div className="space-y-1 border-t bg-muted/40 px-4 py-3">
-            <SummaryRow label="Opening balance" value={formatMoney(report.data?.openingBalance ?? 0)} className="max-w-sm" />
-            <SummaryRow label="Closing balance" value={formatMoney(report.data?.closingBalance ?? 0)} strong className="max-w-sm" />
+            <SummaryRow
+              label={t('reports.generalLedger.openingBalance')}
+              value={formatMoney(report.data?.openingBalance ?? 0)}
+              className="max-w-sm"
+            />
+            <SummaryRow
+              label={t('reports.generalLedger.closingBalance')}
+              value={formatMoney(report.data?.closingBalance ?? 0)}
+              strong
+              className="max-w-sm"
+            />
           </div>
         }
       >
         <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/40 px-4 py-3">
           <div>
             <p className="text-sm font-semibold">
-              {report.data ? `${report.data.accountCode} · ${report.data.accountName}` : 'Select an account'}
+              {report.data
+                ? `${report.data.accountCode} · ${report.data.accountName}`
+                : t('reports.generalLedger.selectAccount')}
             </p>
             <p className="text-xs text-muted-foreground">
-              {formatDate(startDate)} → {formatDate(endDate)} · {report.data?.lines.length ?? 0} movement(s)
+              {formatDate(startDate)} → {formatDate(endDate)} ·{' '}
+              {t('reports.generalLedger.movements', { count: report.data?.lines.length ?? 0 })}
             </p>
           </div>
-          <Badge variant="secondary">Opening {formatMoney(report.data?.openingBalance ?? 0)}</Badge>
+          <Badge variant="secondary">
+            {t('reports.generalLedger.openingBadge', {
+              amount: formatMoney(report.data?.openingBalance ?? 0),
+            })}
+          </Badge>
         </div>
 
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Entry</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead className="text-right">Debit</TableHead>
-              <TableHead className="text-right">Credit</TableHead>
-              <TableHead className="text-right">Running balance</TableHead>
+              <TableHead>{t('reports.generalLedger.date')}</TableHead>
+              <TableHead>{t('reports.generalLedger.entry')}</TableHead>
+              <TableHead>{t('common.description')}</TableHead>
+              <TableHead className="text-end">{t('reports.generalLedger.debit')}</TableHead>
+              <TableHead className="text-end">{t('reports.generalLedger.credit')}</TableHead>
+              <TableHead className="text-end">{t('reports.generalLedger.runningBalance')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {!report.data ? null : report.data.lines.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">
-                  No movements in this period.
+                  {t('reports.generalLedger.noMovements')}
                 </TableCell>
               </TableRow>
             ) : (
@@ -113,19 +139,29 @@ export function GeneralLedgerPage() {
                     <Link
                       to="/gl/journal-entries"
                       className="font-mono text-xs text-primary hover:underline"
-                      title="Open the journal entries list"
+                      title={t('reports.generalLedger.openJournalTooltip')}
                     >
                       {line.entryNumber}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{line.description || '—'}</TableCell>
-                  <TableCell className="text-right">
-                    {line.debit ? <Money value={line.debit} /> : <span className="text-muted-foreground">—</span>}
+                  <TableCell className="text-muted-foreground">
+                    {line.description || t('common.dash')}
                   </TableCell>
-                  <TableCell className="text-right">
-                    {line.credit ? <Money value={line.credit} /> : <span className="text-muted-foreground">—</span>}
+                  <TableCell className="text-end">
+                    {line.debit ? (
+                      <Money value={line.debit} />
+                    ) : (
+                      <span className="text-muted-foreground">{t('common.dash')}</span>
+                    )}
                   </TableCell>
-                  <TableCell className="text-right font-medium">
+                  <TableCell className="text-end">
+                    {line.credit ? (
+                      <Money value={line.credit} />
+                    ) : (
+                      <span className="text-muted-foreground">{t('common.dash')}</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-end font-medium">
                     <Money value={line.runningBalance} />
                   </TableCell>
                 </TableRow>

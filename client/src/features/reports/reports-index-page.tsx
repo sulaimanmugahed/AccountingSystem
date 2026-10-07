@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   ArrowRight,
   BarChart3,
@@ -20,50 +21,51 @@ import { endOfMonth, formatDate, formatMoney, startOfYear, today } from '@/lib/f
 
 const reports = [
   {
-    title: 'Trial balance',
-    description: 'Debit and credit movement per account — verifies the ledger balances.',
+    titleKey: 'reports.trialBalance.title',
+    descriptionKey: 'reports.indexStats.hintTrialBalance',
     href: '/reports/trial-balance',
     icon: Scale,
   },
   {
-    title: 'Income statement',
-    description: 'Revenue and expenses for a period, with net income and margin.',
+    titleKey: 'reports.incomeStatement.title',
+    descriptionKey: 'reports.indexStats.hintIncomeStatement',
     href: '/reports/income-statement',
     icon: TrendingUp,
   },
   {
-    title: 'Balance sheet',
-    description: 'Assets, liabilities and equity as of a date, including current-year earnings.',
+    titleKey: 'reports.balanceSheet.title',
+    descriptionKey: 'reports.indexStats.hintBalanceSheet',
     href: '/reports/balance-sheet',
     icon: Landmark,
   },
   {
-    title: 'General ledger detail',
-    description: 'Every posted line for a single account with a running balance.',
+    titleKey: 'reports.generalLedger.title',
+    descriptionKey: 'reports.indexStats.hintGeneralLedger',
     href: '/reports/general-ledger',
     icon: BookOpen,
   },
   {
-    title: 'AR aging',
-    description: 'Customer balances bucketed by days past due.',
+    titleKey: 'reports.arAging.title',
+    descriptionKey: 'reports.indexStats.hintArAging',
     href: '/reports/ar-aging',
     icon: Wallet,
   },
   {
-    title: 'AP aging',
-    description: 'Vendor balances bucketed by days past due.',
+    titleKey: 'reports.apAging.title',
+    descriptionKey: 'reports.indexStats.hintApAging',
     href: '/reports/ap-aging',
     icon: Banknote,
   },
   {
-    title: 'Cash flow statement',
-    description: 'Indirect-method operating cash flow with changes in working capital.',
+    titleKey: 'reports.cashFlow.title',
+    descriptionKey: 'reports.indexStats.hintCashFlow',
     href: '/reports/cash-flow',
     icon: BarChart3,
   },
 ]
 
 export function ReportsIndexPage() {
+  const { t } = useTranslation()
   const asOf = today()
   const trialBalance = useTrialBalance(asOf)
   const balanceSheet = useBalanceSheet(asOf)
@@ -76,51 +78,69 @@ export function ReportsIndexPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Reports & financial statements"
-        description={`Statements are computed live from the posted journal as of ${formatDate(asOf)} — there are no stored report snapshots to reconcile.`}
-        breadcrumbs={[{ label: 'Reports' }]}
+        title={t('reports.index.title')}
+        description={t('reports.index.description', { date: formatDate(asOf) })}
+        breadcrumbs={[{ label: t('nav.items.reports') }]}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Total assets"
+          label={t('reports.indexStats.totalAssets')}
           value={formatMoney(balanceSheet.data?.totalAssets ?? 0)}
-          hint="Balance sheet"
+          hint={t('reports.indexStats.hintBalanceSheet')}
           icon={Landmark}
         />
         <StatCard
-          label="Net income (YTD)"
+          label={t('reports.indexStats.netIncomeYtd')}
           value={formatMoney(incomeStatement.data?.netIncome ?? 0)}
           tone={(incomeStatement.data?.netIncome ?? 0) >= 0 ? 'positive' : 'negative'}
-          hint="Income statement"
+          hint={t('reports.indexStats.hintIncomeStatement')}
           icon={TrendingUp}
         />
-        <StatCard label="Open AR" value={formatMoney(arAging.data?.grandTotal ?? 0)} hint="Receivables aging" icon={Wallet} />
-        <StatCard label="Open AP" value={formatMoney(apAging.data?.grandTotal ?? 0)} hint="Payables aging" icon={Banknote} />
+        <StatCard
+          label={t('reports.indexStats.openAr')}
+          value={formatMoney(arAging.data?.grandTotal ?? 0)}
+          hint={t('reports.indexStats.hintArAging')}
+          icon={Wallet}
+        />
+        <StatCard
+          label={t('reports.indexStats.openAp')}
+          value={formatMoney(apAging.data?.grandTotal ?? 0)}
+          hint={t('reports.indexStats.hintApAging')}
+          icon={Banknote}
+        />
       </div>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-sm">Ledger integrity</CardTitle>
+          <CardTitle className="text-sm">{t('reports.indexStats.ledgerIntegrity')}</CardTitle>
           <Badge variant={balanced ? 'success' : 'destructive'}>
-            {balanced ? 'Trial balance is balanced' : 'Out of balance'}
+            {balanced
+              ? t('reports.indexStats.trialBalanceBalanced')
+              : t('reports.indexStats.outOfBalance')}
           </Badge>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-3">
           <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Total debits</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              {t('reports.indexStats.totalDebits')}
+            </p>
             <p className="text-lg font-semibold tabular-nums">
               <Money value={trialBalance.data?.totalDebit ?? 0} />
             </p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Total credits</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              {t('reports.indexStats.totalCredits')}
+            </p>
             <p className="text-lg font-semibold tabular-nums">
               <Money value={trialBalance.data?.totalCredit ?? 0} />
             </p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Period covered</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              {t('reports.indexStats.periodCovered')}
+            </p>
             <p className="text-sm font-medium">
               {formatDate(incomeStatement.data?.startDate ?? startOfYear())} →{' '}
               {formatDate(incomeStatement.data?.endDate ?? endOfMonth())}
@@ -138,13 +158,13 @@ export function ReportsIndexPage() {
                   <report.icon className="h-4 w-4 text-muted-foreground" />
                 </div>
                 <div>
-                  <p className="font-medium">{report.title}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{report.description}</p>
+                  <p className="font-medium">{t(report.titleKey)}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{t(report.descriptionKey)}</p>
                 </div>
               </div>
               <Button variant="outline" size="sm" className="w-fit" asChild>
                 <Link to={report.href}>
-                  Open <ArrowRight className="h-4 w-4" />
+                  {t('reports.indexStats.open')} <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
             </CardContent>
@@ -156,14 +176,13 @@ export function ReportsIndexPage() {
               <Clock className="h-4 w-4 text-muted-foreground" />
             </div>
             <div>
-              <p className="font-medium">Period close workflow</p>
+              <p className="font-medium">{t('reports.indexStats.closeWorkflowTitle')}</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Close a period or fiscal year from General Ledger → Fiscal Periods. Year-end closing rolls results into
-                retained earnings.
+                {t('reports.indexStats.closeWorkflowDescription')}
               </p>
               <Button variant="ghost" size="sm" className="mt-3" asChild>
                 <Link to="/gl/fiscal-periods">
-                  Manage periods <ArrowRight className="h-4 w-4" />
+                  {t('reports.indexStats.managePeriods')} <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
             </div>
