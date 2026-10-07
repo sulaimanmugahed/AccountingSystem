@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 222 47% 20%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 15%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 210 40% 94%;
+    --accent-foreground: 222 47% 15%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 60% 38%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 32 95% 44%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 222 47% 35%;
+
+    --sidebar: 222 47% 14%;
+    --sidebar-foreground: 213 31% 91%;
+    --sidebar-accent: 222 40% 22%;
+    --sidebar-border: 222 35% 25%;
+
+    --radius: 0.6rem;
+  }
+
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 210 40% 96%;
+
+    --card: 222 45% 11%;
+    --card-foreground: 210 40% 96%;
+
+    --popover: 222 45% 11%;
+    --popover-foreground: 210 40% 96%;
+
+    --primary: 210 40% 96%;
+    --primary-foreground: 222 47% 12%;
+
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 96%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 33% 20%;
+    --accent-foreground: 210 40% 96%;
+
+    --destructive: 0 63% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 50% 38%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 32 90% 45%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 217 33% 20%;
+    --input: 217 33% 22%;
+    --ring: 213 27% 70%;
+
+    --sidebar: 222 47% 6%;
+    --sidebar-foreground: 213 31% 88%;
+    --sidebar-accent: 222 40% 15%;
+    --sidebar-border: 222 35% 18%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'rlig' 1, 'calt' 1, 'tnum' 1;
+  }
+
+  /* Tabular figures keep money columns aligned. */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-border;
+  }
+}
