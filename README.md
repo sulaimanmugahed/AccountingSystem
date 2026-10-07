@@ -67,6 +67,22 @@ cd src/AccountingSystem.Api
 dotnet ef migrations add <Name> --project ../AccountingSystem.Infrastructure --startup-project .
 ```
 
+## Documentation (Arabic)
+
+A beginner's guide to accounting written against this system's demo data —
+`docs/دليل-المحاسبة-بالعربية.pdf` (19 pages, right-to-left) with Markdown and
+HTML versions next to it. Covers the accounting equation, debit/credit, the seeded
+chart of accounts, every operation with the journal entries it produces, how to read
+each report, a month-end cycle and a glossary.
+
+Rebuild it after editing the Markdown:
+
+```bash
+pip install fpdf2 uharfbuzz      # Amiri is fetched with npm on first run
+python docs/build-guide-pdf.py
+python docs/build-guide-html.py
+```
+
 ## React client (`client/`)
 
 A complete single-page app for every API surface — dashboard, general ledger, AR, AP,

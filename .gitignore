@@ -37,3 +37,7 @@ client/.vite/
 client/*.local
 npm-debug.log*
 yarn-error.log*
+
+## Guide build cache
+docs/__pycache__/
+docs/fonts/
